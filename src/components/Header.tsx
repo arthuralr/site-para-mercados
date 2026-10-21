@@ -39,7 +39,7 @@ import {
 import { useStore } from "@/context/StoreContext";
 import { formatProductQuantity } from "@/lib/productUnits";
 import { formatBRL } from "./ProductCard";
-import CartAndListsDrawers from "./CartAndListsDrawers";
+import CartDrawer from "./CartDrawer";
 import PushPermissionBanner from "./PushPermissionBanner";
 
 interface HeaderProps {
@@ -725,7 +725,7 @@ export default function Header({
       </header>
 
       {/* Slide-Over Cart & Smart Lists Modal */}
-      <CartAndListsDrawers />
+      <CartDrawer />
 
       {/* Slide-Over Favorites Drawer */}
       {isFavDrawerOpen && (

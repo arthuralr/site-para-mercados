@@ -29,7 +29,7 @@ import { useStore, SavedShoppingList } from "@/context/StoreContext";
 import { formatBRL } from "./ProductCard";
 import { formatProductQuantity, isSoldByWeight } from "@/lib/productUnits";
 
-export default function CartAndListsDrawers() {
+export default function CartDrawer() {
   const router = useRouter();
   const {
     selectedBranch,
