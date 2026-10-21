@@ -25,6 +25,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { useStore, SavedShoppingList } from "@/context/StoreContext";
 import { formatBRL } from "@/components/ProductCard";
+import { formatProductQuantity } from "@/lib/productUnits";
 
 export default function CustomerAccountPage() {
   const {
@@ -37,6 +38,7 @@ export default function CustomerAccountPage() {
     searchQuery,
     setSearchQuery,
     addToCart,
+    addOrderItemsToCart,
     removeFromCart,
     clearProductFromCart,
     toggleFavorite,
@@ -69,6 +71,17 @@ export default function CustomerAccountPage() {
   const [regNeighborhood, setRegNeighborhood] = useState("");
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const customerOrders = currentUser
+    ? orders.filter((order) => {
+        const orderEmail = order.cliente_email?.trim().toLowerCase();
+        if (orderEmail) return orderEmail === currentUser.email.trim().toLowerCase();
+
+        const normalizePhone = (phone: string) => phone.replace(/\D/g, "");
+        const orderPhone = normalizePhone(order.cliente_telefone || "");
+        const customerPhone = normalizePhone(currentUser.phone || "");
+        return orderPhone.length >= 10 && orderPhone === customerPhone;
+      })
+    : [];
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,7 +125,7 @@ export default function CustomerAccountPage() {
       `----------------------------------`,
       ...entries.map(
         ({ prod, qty }, idx) =>
-          `${idx + 1}. *${qty}x ${prod.name}* — ${formatBRL(prod.price * qty)}`
+          `${idx + 1}. *${formatProductQuantity(prod, qty)} de ${prod.name}* — ${formatBRL(prod.price * qty)}`
       ),
       `----------------------------------`,
       `💰 *Total Estimado:* *${formatBRL(total)}*`,
@@ -422,7 +435,7 @@ export default function CustomerAccountPage() {
                     <div className="flex items-center gap-2.5">
                       <ShoppingBag className="h-5 w-5 text-brand-green-700" />
                       <h2 className="text-base font-black text-slate-900">
-                        Meu Histórico de Compras ({orders.length})
+                        Meus Pedidos Anteriores ({customerOrders.length})
                       </h2>
                     </div>
                     <Link
@@ -434,7 +447,17 @@ export default function CustomerAccountPage() {
                   </div>
 
                   <div className="mt-4 space-y-3">
-                    {orders.map((ord) => (
+                    {customerOrders.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+                        <ShoppingBag className="mx-auto h-8 w-8 text-slate-400" />
+                        <p className="mt-2 text-sm font-bold text-slate-700">
+                          Você ainda não tem pedidos anteriores.
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Seus pedidos aparecerão aqui depois da compra.
+                        </p>
+                      </div>
+                    ) : customerOrders.map((ord) => (
                       <div
                         key={ord.id}
                         className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
@@ -443,6 +466,11 @@ export default function CustomerAccountPage() {
                           <div>
                             <span className="font-mono text-xs font-black text-brand-green-800">
                               Pedido #{ord.id.slice(0, 10)}
+                            </span>
+                            <span className="ml-2 text-[11px] text-slate-500">
+                              {new Date(ord.criado_em).toLocaleDateString(
+                                "pt-BR"
+                              )}
                             </span>
                             <span className="ml-2 rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-800">
                               {ord.status}
@@ -461,7 +489,13 @@ export default function CustomerAccountPage() {
                               key={idx}
                               className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
                             >
-                              {it.quantidade}x {it.nome}
+                              {formatProductQuantity(
+                                products.find(
+                                  (product) => product.id === it.produto_id
+                                ) || { unit: it.unidade || "un" },
+                                it.quantidade
+                              )}{" "}
+                              {it.nome}
                             </span>
                           ))}
                         </div>
@@ -469,18 +503,13 @@ export default function CustomerAccountPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              (ord.itens_json || []).forEach((it) => {
-                                const found = products.find(
-                                  (p) => p.id === it.produto_id
-                                );
-                                if (found) addToCart(found, it.quantidade);
-                              });
+                              addOrderItemsToCart(ord.itens_json || []);
                               setIsCartDrawerOpen(true);
                             }}
                             className="inline-flex items-center gap-1.5 rounded-xl bg-brand-green-600 px-3 py-1.5 text-xs font-extrabold text-white hover:bg-brand-green-700"
                           >
                             <RotateCcw className="h-3.5 w-3.5" />
-                            <span>Repetir Pedido no Carrinho</span>
+                            <span>Comprar Novamente</span>
                           </button>
                         </div>
                       </div>

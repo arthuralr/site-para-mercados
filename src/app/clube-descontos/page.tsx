@@ -132,7 +132,7 @@ export default function DiscountClubPage() {
                 </div>
               </div>
               <p className="mt-3 text-xs text-slate-600">
-                Participe do grupo oficial de ofertas do SuperVerde! Grupo silencioso (apenas administradores enviam o encarte da semana e ofertas relâmpago).
+                Participe do grupo oficial de ofertas do SuperVerde! Grupo silencioso (apenas administradores enviam o Panfleto de Ofertas e ofertas relâmpago).
               </p>
               <a
                 href={storeSettings.whatsappOffersGroupUrl}
@@ -292,7 +292,7 @@ export default function DiscountClubPage() {
                         className="h-4 w-4 rounded accent-brand-green-700"
                       />
                       <span>
-                        Autorizo receber o Tabloide Digital e ofertas exclusivas do Clube SuperVerde pelo WhatsApp (de acordo com a LGPD).
+                        Autorizo receber o Panfleto de Ofertas e ofertas exclusivas do Clube SuperVerde pelo WhatsApp (de acordo com a LGPD).
                       </span>
                     </label>
                   </div>

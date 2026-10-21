@@ -22,21 +22,45 @@ export default function FlashDeals({
   onRemove,
   onToggleFavorite,
 }: FlashDealsProps) {
-  // Initial countdown: 4 hours, 38 minutes, 52 seconds
-  const [secondsLeft, setSecondsLeft] = useState(4 * 3600 + 38 * 60 + 52);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 4 * 3600));
-    }, 1000);
-    return () => clearInterval(interval);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const hours = String(Math.floor(secondsLeft / 3600)).padStart(2, "0");
-  const minutes = String(Math.floor((secondsLeft % 3600) / 60)).padStart(2, "0");
-  const seconds = String(secondsLeft % 60).padStart(2, "0");
+  const flashProducts = products.filter((product) => {
+    if (!product.isFlashDeal || product.isActive === false) return false;
+    const startsAt = product.flashStartDate
+      ? Date.parse(product.flashStartDate)
+      : Number.NaN;
+    const endsAt = product.flashEndDate
+      ? Date.parse(product.flashEndDate)
+      : Number.NaN;
+    if (!Number.isFinite(startsAt) || !Number.isFinite(endsAt)) return false;
+    return startsAt <= now && now < endsAt;
+  });
 
-  const flashProducts = products.filter((p) => p.isFlashDeal);
+  const nearestEnd = flashProducts.reduce((nearest, product) => {
+    const endsAt = product.flashEndDate
+      ? new Date(product.flashEndDate).getTime()
+      : Number.POSITIVE_INFINITY;
+    return Math.min(nearest, endsAt);
+  }, Number.POSITIVE_INFINITY);
+  const secondsLeft = Number.isFinite(nearestEnd)
+    ? Math.max(0, Math.floor((nearestEnd - now) / 1000))
+    : null;
+
+  const hours =
+    secondsLeft === null
+      ? "00"
+      : String(Math.floor(secondsLeft / 3600)).padStart(2, "0");
+  const minutes =
+    secondsLeft === null
+      ? "00"
+      : String(Math.floor((secondsLeft % 3600) / 60)).padStart(2, "0");
+  const seconds =
+    secondsLeft === null ? "00" : String(secondsLeft % 60).padStart(2, "0");
 
   if (flashProducts.length === 0) return null;
 
@@ -65,7 +89,7 @@ export default function FlashDeals({
             </div>
           </div>
 
-          {/* Countdown Box */}
+          {/* Countdown to the nearest active offer expiration */}
           <div className="flex items-center gap-3 self-start rounded-2xl bg-slate-900 px-4 py-2.5 text-white shadow-md md:self-auto">
             <div className="flex items-center gap-1.5 text-xs font-bold text-brand-orange-400">
               <Clock className="h-4 w-4 animate-pulse" />

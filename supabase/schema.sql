@@ -56,6 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_ofertas_relampago_datas ON public.ofertas_relampa
 CREATE TABLE IF NOT EXISTS public.pedidos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   cliente_nome TEXT NOT NULL,
+  cliente_email TEXT,
   cliente_telefone TEXT NOT NULL,
   endereco TEXT NOT NULL,
   itens_json JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -67,8 +68,12 @@ CREATE TABLE IF NOT EXISTS public.pedidos (
   criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.pedidos
+  ADD COLUMN IF NOT EXISTS cliente_email TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_pedidos_criado_em ON public.pedidos (criado_em DESC);
 CREATE INDEX IF NOT EXISTS idx_pedidos_status ON public.pedidos (status);
+CREATE INDEX IF NOT EXISTS idx_pedidos_cliente_email ON public.pedidos (cliente_email);
 
 -- ============================================================================
 -- 4. POLÍTICAS DE SEGURANÇA (ROW LEVEL SECURITY - RLS)
@@ -213,11 +218,21 @@ CREATE TABLE IF NOT EXISTS public.configuracoes_loja (
   atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 6.6 Inteligência de mercado e pesquisa de preços de concorrentes
+CREATE TABLE IF NOT EXISTS public.pesquisa_concorrentes (
+  id TEXT PRIMARY KEY,
+  nome TEXT NOT NULL,
+  bairro TEXT NOT NULL,
+  precos_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.solicitacoes_cartao ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.curriculos_trabalhe_conosco ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clube_descontos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.configuracoes_loja ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pesquisa_concorrentes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Acesso total clientes" ON public.clientes;
 CREATE POLICY "Acesso total clientes" ON public.clientes FOR ALL USING (true) WITH CHECK (true);
@@ -233,6 +248,9 @@ CREATE POLICY "Acesso total clube_descontos" ON public.clube_descontos FOR ALL U
 
 DROP POLICY IF EXISTS "Acesso total configuracoes_loja" ON public.configuracoes_loja;
 CREATE POLICY "Acesso total configuracoes_loja" ON public.configuracoes_loja FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Acesso total pesquisa_concorrentes" ON public.pesquisa_concorrentes;
+CREATE POLICY "Acesso total pesquisa_concorrentes" ON public.pesquisa_concorrentes FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================================================
 -- 7. MÓDULO DE WEB PUSH NOTIFICATIONS (INSCRIÇÕES E DISPAROS EM MASSA)
@@ -273,4 +291,3 @@ CREATE POLICY "Acesso total push_subscriptions" ON public.push_subscriptions FOR
 
 DROP POLICY IF EXISTS "Acesso total push_notifications_history" ON public.push_notifications_history;
 CREATE POLICY "Acesso total push_notifications_history" ON public.push_notifications_history FOR ALL USING (true) WITH CHECK (true);
-

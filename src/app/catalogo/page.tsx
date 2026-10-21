@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -101,67 +101,78 @@ function CatalogContent() {
   };
 
   // Apply all filters & sorting
-  const filteredProducts = products
-    .filter((product) => {
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const match =
-          product.name.toLowerCase().includes(q) ||
-          product.department.toLowerCase().includes(q) ||
-          product.brand.toLowerCase().includes(q) ||
-          product.dietary.some((d) => d.toLowerCase().includes(q));
-        if (!match) return false;
-      }
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredProducts = useMemo(
+    () =>
+      products
+        .filter((product) => {
+          if (normalizedSearchQuery) {
+            const match =
+              product.name.toLowerCase().includes(normalizedSearchQuery) ||
+              product.department
+                .toLowerCase()
+                .includes(normalizedSearchQuery) ||
+              product.brand.toLowerCase().includes(normalizedSearchQuery) ||
+              product.dietary.some((diet) =>
+                diet.toLowerCase().includes(normalizedSearchQuery)
+              );
+            if (!match) return false;
+          }
 
-      // Department filter
-      if (
-        selectedDepartments.length > 0 &&
-        !selectedDepartments.includes(product.department)
-      ) {
-        return false;
-      }
+          if (
+            selectedDepartments.length > 0 &&
+            !selectedDepartments.includes(product.department)
+          ) {
+            return false;
+          }
 
-      // Price range preset filter
-      if (priceRange === "up-to-15" && product.price > 15) return false;
-      if (
-        priceRange === "15-to-35" &&
-        (product.price < 15 || product.price > 35)
-      )
-        return false;
-      if (priceRange === "above-35" && product.price <= 35) return false;
+          if (priceRange === "up-to-15" && product.price > 15) return false;
+          if (
+            priceRange === "15-to-35" &&
+            (product.price < 15 || product.price > 35)
+          ) {
+            return false;
+          }
+          if (priceRange === "above-35" && product.price <= 35) return false;
+          if (product.price > maxPriceSlider) return false;
 
-      // Max price slider filter
-      if (product.price > maxPriceSlider) return false;
+          if (
+            selectedBrands.length > 0 &&
+            !selectedBrands.includes(product.brand)
+          ) {
+            return false;
+          }
 
-      // Brand filter
-      if (
-        selectedBrands.length > 0 &&
-        !selectedBrands.includes(product.brand)
-      ) {
-        return false;
-      }
+          if (
+            selectedDietary.length > 0 &&
+            !selectedDietary.every((req) => product.dietary.includes(req))
+          ) {
+            return false;
+          }
 
-      // Dietary restrictions filter (every selected dietary restriction must be present)
-      if (
-        selectedDietary.length > 0 &&
-        !selectedDietary.every((req) => product.dietary.includes(req))
-      ) {
-        return false;
-      }
+          if (onlyOffers && !product.discountPercent) return false;
 
-      // Only promotional offers
-      if (onlyOffers && !product.discountPercent) return false;
-
-      return true;
-    })
-    .sort((a, b) => {
-      if (sortBy === "price-asc") return a.price - b.price;
-      if (sortBy === "price-desc") return b.price - a.price;
-      if (sortBy === "discount")
-        return (b.discountPercent || 0) - (a.discountPercent || 0);
-      return b.rating - a.rating;
-    });
+          return true;
+        })
+        .sort((a, b) => {
+          if (sortBy === "price-asc") return a.price - b.price;
+          if (sortBy === "price-desc") return b.price - a.price;
+          if (sortBy === "discount")
+            return (b.discountPercent || 0) - (a.discountPercent || 0);
+          return b.rating - a.rating;
+        }),
+    [
+      products,
+      normalizedSearchQuery,
+      selectedDepartments,
+      priceRange,
+      maxPriceSlider,
+      selectedBrands,
+      selectedDietary,
+      onlyOffers,
+      sortBy,
+    ]
+  );
 
   const activeFiltersCount =
     selectedDepartments.length +
@@ -434,10 +445,10 @@ function CatalogContent() {
             </p>
           </div>
           <Link
-            href="/tabloide"
+            href="/panfleto-de-ofertas"
             className="self-start rounded-2xl bg-white px-4 py-2.5 text-xs font-extrabold text-brand-green-800 shadow-md transition hover:bg-orange-50 sm:self-auto"
           >
-            Ver Tabloide da Semana →
+            Ver Panfleto de Ofertas da Semana →
           </Link>
         </div>
 

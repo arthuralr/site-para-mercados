@@ -69,7 +69,7 @@ export default function PushPermissionBanner() {
                     </span>{" "}
                     e do{" "}
                     <span className="text-brand-green-700">
-                      Encarte da Semana
+                      Panfleto de Ofertas
                     </span>{" "}
                     direto no navegador!
                   </p>

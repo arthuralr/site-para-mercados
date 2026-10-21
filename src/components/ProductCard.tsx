@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   Heart,
@@ -14,13 +14,19 @@ import {
 } from "lucide-react";
 import { Product } from "@/data/mockData";
 import { useStore } from "@/context/StoreContext";
+import {
+  formatProductQuantity,
+  formatWeightOption,
+  isSoldByWeight,
+  WEIGHT_OPTIONS_KG,
+} from "@/lib/productUnits";
 
 interface ProductCardProps {
   product: Product;
   quantityInCart: number;
   isFavorite: boolean;
-  onAdd: (product: Product) => void;
-  onRemove: (productId: string) => void;
+  onAdd: (product: Product, qty?: number) => void;
+  onRemove: (productId: string, qty?: number) => void;
   onToggleFavorite: (productId: string) => void;
   variant?: "default" | "flash";
 }
@@ -43,6 +49,10 @@ export default function ProductCard({
 }: ProductCardProps) {
   const { storeSettings } = useStore();
   const isOnlineEnabled = storeSettings.onlineShoppingEnabled;
+  const isWeightProduct = isSoldByWeight(product);
+  const [selectedWeightKg, setSelectedWeightKg] = useState<number>(
+    WEIGHT_OPTIONS_KG[0]
+  );
 
   return (
     <div
@@ -143,6 +153,22 @@ export default function ProductCard({
 
       {/* Pricing & CTA */}
       <div className="mt-3 border-t border-slate-100 pt-2">
+        {isWeightProduct && (
+          <label className="mb-2 block text-[11px] font-bold text-slate-600">
+            Escolha o peso
+            <select
+              value={selectedWeightKg}
+              onChange={(event) => setSelectedWeightKg(Number(event.target.value))}
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-700"
+            >
+              {WEIGHT_OPTIONS_KG.map((weight) => (
+                <option key={weight} value={weight}>
+                  {formatWeightOption(weight)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {/* Old Price Strikethrough */}
         {product.oldPrice ? (
           <div className="flex items-center gap-1.5">
@@ -166,6 +192,14 @@ export default function ProductCard({
             /{product.unit.split(" ")[0]}
           </span>
         </div>
+        {isWeightProduct && (
+          <p className="mt-0.5 text-[11px] font-semibold text-slate-600">
+            {formatWeightOption(selectedWeightKg)}:{" "}
+            <span className="text-brand-green-800">
+              {formatBRL(product.price * selectedWeightKg)}
+            </span>
+          </p>
+        )}
 
         {/* Loyalty Club Price if available */}
         {product.clubPrice && (
@@ -207,7 +241,9 @@ export default function ProductCard({
           ) : quantityInCart === 0 ? (
             <button
               type="button"
-              onClick={() => onAdd(product)}
+              onClick={() =>
+                onAdd(product, isWeightProduct ? selectedWeightKg : 1)
+              }
               className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all active:scale-[0.98] sm:text-sm ${
                 variant === "flash"
                   ? "bg-brand-orange-500 text-white shadow-sm hover:bg-brand-orange-600"
@@ -228,7 +264,7 @@ export default function ProductCard({
                 <Minus className="h-4 w-4" />
               </button>
               <span className="text-sm font-extrabold text-brand-green-800">
-                {quantityInCart} {quantityInCart === 1 ? "un" : "uns"}
+                {formatProductQuantity(product, quantityInCart)}
               </span>
               <button
                 type="button"

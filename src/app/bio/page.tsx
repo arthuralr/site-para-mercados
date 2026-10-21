@@ -101,28 +101,26 @@ export default function InstagramBioPage() {
 
           {/* Social Icons Row */}
           <div className="mt-4 flex items-center justify-center gap-2.5">
-            {storeSettings.instagramUrl && (
-              <a
-                href={storeSettings.instagramUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-pink-300 transition hover:scale-105 hover:bg-white/25"
-                aria-label="Instagram"
-              >
-                <Instagram className="h-5 w-5" />
-              </a>
-            )}
-            {storeSettings.facebookUrl && (
-              <a
-                href={storeSettings.facebookUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-blue-300 transition hover:scale-105 hover:bg-white/25"
-                aria-label="Facebook"
-              >
-                <Facebook className="h-5 w-5" />
-              </a>
-            )}
+            {storeSettings.socialLinks
+              .filter((social) => social.name.trim() && social.url.trim())
+              .map((social) => (
+                <a
+                  key={social.id}
+                  href={social.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex h-10 items-center justify-center rounded-2xl bg-white/15 px-3 text-xs font-bold text-white transition hover:scale-105 hover:bg-white/25"
+                  aria-label={social.name}
+                >
+                  {social.name.trim().toLowerCase() === "instagram" ? (
+                    <Instagram className="h-5 w-5" />
+                  ) : social.name.trim().toLowerCase() === "facebook" ? (
+                    <Facebook className="h-5 w-5" />
+                  ) : (
+                    <span>{social.name}</span>
+                  )}
+                </a>
+              ))}
             <a
               href={whatsappDirectUrl}
               target="_blank"

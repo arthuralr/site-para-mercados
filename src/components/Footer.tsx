@@ -144,28 +144,26 @@ export default function Footer({ selectedBranch }: FooterProps) {
 
               {/* Editable Social Media Links */}
               <div className="flex flex-wrap items-center gap-2">
-                {storeSettings.instagramUrl && (
-                  <a
-                    href={storeSettings.instagramUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs font-bold text-pink-400 transition hover:border-pink-500/50 hover:bg-slate-800"
-                  >
-                    <Instagram className="h-4 w-4" />
-                    <span>Instagram</span>
-                  </a>
-                )}
-                {storeSettings.facebookUrl && (
-                  <a
-                    href={storeSettings.facebookUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs font-bold text-blue-400 transition hover:border-blue-500/50 hover:bg-slate-800"
-                  >
-                    <Facebook className="h-4 w-4" />
-                    <span>Facebook</span>
-                  </a>
-                )}
+                {storeSettings.socialLinks
+                  .filter((social) => social.name.trim() && social.url.trim())
+                  .map((social) => (
+                    <a
+                      key={social.id}
+                      href={social.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-950/80 px-3 py-2 text-xs font-bold text-slate-200 transition hover:border-brand-green-500/50 hover:bg-slate-800"
+                    >
+                      {social.name.trim().toLowerCase() === "instagram" ? (
+                        <Instagram className="h-4 w-4 text-pink-400" />
+                      ) : social.name.trim().toLowerCase() === "facebook" ? (
+                        <Facebook className="h-4 w-4 text-blue-400" />
+                      ) : (
+                        <ExternalLink className="h-4 w-4 text-brand-orange-400" />
+                      )}
+                      <span>{social.name}</span>
+                    </a>
+                  ))}
                 <a
                   href={whatsappDirectHref}
                   target="_blank"
@@ -184,12 +182,48 @@ export default function Footer({ selectedBranch }: FooterProps) {
                 </Link>
               </div>
 
+              {(storeSettings.playStoreEnabled ||
+                storeSettings.appStoreEnabled) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {storeSettings.playStoreEnabled &&
+                    storeSettings.playStoreUrl && (
+                      <a
+                        href={storeSettings.playStoreUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:border-brand-green-500 hover:bg-slate-800"
+                      >
+                        <Smartphone className="h-4 w-4 text-brand-green-400" />
+                        <span>Google Play Store</span>
+                      </a>
+                    )}
+                  {storeSettings.appStoreEnabled &&
+                    storeSettings.appStoreUrl && (
+                      <a
+                        href={storeSettings.appStoreUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:border-brand-green-500 hover:bg-slate-800"
+                      >
+                        <Smartphone className="h-4 w-4 text-slate-300" />
+                        <span>Apple App Store</span>
+                      </a>
+                    )}
+                </div>
+              )}
+
               <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-3.5 text-xs">
                 <div className="flex items-center gap-2 font-bold text-white">
                   <MapPin className="h-4 w-4 text-brand-orange-400" />
                   <span>{selectedBranch.name}</span>
                 </div>
                 <p className="text-slate-400">{selectedBranch.address}</p>
+                {(selectedBranch.phone || selectedBranch.email) && (
+                  <div className="space-y-1 text-slate-400">
+                    {selectedBranch.phone && <p>{selectedBranch.phone}</p>}
+                    {selectedBranch.email && <p>{selectedBranch.email}</p>}
+                  </div>
+                )}
                 <p className="text-emerald-400 font-medium">
                   ⏱ {selectedBranch.hours}
                 </p>

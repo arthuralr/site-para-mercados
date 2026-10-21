@@ -32,6 +32,7 @@ import Footer from "@/components/Footer";
 import { Product } from "@/data/mockData";
 import { useStore } from "@/context/StoreContext";
 import { formatBRL } from "@/components/ProductCard";
+import { formatProductQuantity, isSoldByWeight } from "@/lib/productUnits";
 
 type CheckoutMethod = "proprio" | "whatsapp" | "ifood";
 type FulfillmentMode = "delivery" | "pickup";
@@ -147,7 +148,7 @@ function CheckoutContent() {
     })
     .filter(Boolean) as { product: Product; qty: number }[];
 
-  const totalItems = cartEntries.reduce((acc, item) => acc + item.qty, 0);
+  const totalItems = cartEntries.length;
   const subtotal = cartEntries.reduce(
     (acc, item) => acc + item.product.price * item.qty,
     0
@@ -207,13 +208,13 @@ function CheckoutContent() {
     }
 
     lines.push(`-----------------------------------`);
-    lines.push(`📦 *ITENS DO PEDIDO (${totalItems} un):*`);
+    lines.push(`📦 *ITENS DO PEDIDO (${totalItems} produtos):*`);
 
     cartEntries.forEach(({ product, qty }, idx) => {
       lines.push(
-        `${idx + 1}. *${qty}x ${product.name}* (${
+        `${idx + 1}. *${formatProductQuantity(product, qty)} de ${product.name}* (${
           product.weightVolume
-        })\n   └ ${formatBRL(product.price)}/un = *${formatBRL(
+        })\n   └ ${formatBRL(product.price)}/${isSoldByWeight(product) ? "kg" : "un"} = *${formatBRL(
           product.price * qty
         )}*`
       );
@@ -271,6 +272,7 @@ function CheckoutContent() {
 
     const created = await createOrder({
       cliente_nome: customerName || "Cliente SuperVerde",
+      cliente_email: currentUser?.email,
       cliente_telefone: customerPhone || "(11) 99999-9999",
       endereco: formattedAddress,
       itens_json: itensJson,
@@ -489,7 +491,7 @@ function CheckoutContent() {
             {!storeSettings.onlineShoppingEnabled && (
               <div className="mb-6 rounded-2xl border-2 border-amber-400 bg-amber-50 p-4 text-xs text-amber-950">
                 <strong className="font-black uppercase">
-                  ⚠️ Modo Vitrine / Tabloide Digital Ativo:
+                  ⚠️ Modo Vitrine / Panfleto de Ofertas Ativo:
                 </strong>{" "}
                 O checkout direto no site está temporariamente desativado pelo gestor da loja. Você pode enviar sua lista formatada diretamente para nosso{" "}
                 <strong>WhatsApp ({storeSettings.whatsappDisplayPhone})</strong>{" "}
@@ -1184,7 +1186,9 @@ function CheckoutContent() {
                             {product.name}
                           </p>
                           <p className="text-[11px] text-slate-400">
-                            {formatBRL(product.price)} x {qty} ={" "}
+                            {formatBRL(product.price)} /{" "}
+                            {isSoldByWeight(product) ? "kg" : "un"} ×{" "}
+                            {formatProductQuantity(product, qty)} ={" "}
                             <strong className="text-brand-green-700">
                               {formatBRL(product.price * qty)}
                             </strong>
@@ -1198,8 +1202,8 @@ function CheckoutContent() {
                           >
                             <Minus className="h-3 w-3" />
                           </button>
-                          <span className="w-5 text-center text-xs font-extrabold">
-                            {qty}
+                          <span className="min-w-10 text-center text-xs font-extrabold">
+                            {formatProductQuantity(product, qty)}
                           </span>
                           <button
                             type="button"

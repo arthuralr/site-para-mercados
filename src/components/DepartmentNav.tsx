@@ -13,6 +13,7 @@ import {
   Snowflake,
   LayoutGrid,
   Newspaper,
+  ChefHat,
 } from "lucide-react";
 import Link from "next/link";
 import { Department } from "@/data/mockData";
@@ -56,42 +57,78 @@ export default function DepartmentNav({
     }
   };
 
+  const aisleOrder = [
+    "Açougue",
+    "Hortifrúti",
+    "Padaria",
+    "Bebidas",
+    "Limpeza",
+    "Mercearia",
+  ];
+  const orderedDepartments = [...departments].sort((a, b) => {
+    const aIndex = aisleOrder.indexOf(a.name);
+    const bIndex = aisleOrder.indexOf(b.name);
+    if (aIndex === -1 && bIndex === -1) return a.name.localeCompare(b.name);
+    if (aIndex === -1) return 1;
+    if (bIndex === -1) return -1;
+    return aIndex - bIndex;
+  });
+
   return (
     <nav
-      aria-label="Departamentos do Supermercado"
-      className="border-b border-slate-200/80 bg-white"
+      aria-label="Corredores do supermercado"
+      className="border-b border-slate-200/80 bg-gradient-to-b from-white to-slate-50"
     >
-      <div className="mx-auto max-w-7xl px-4 py-2.5">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
-          {/* "Catálogo Completo" Pill */}
-          <button
-            type="button"
-            onClick={() => handleDepClick(null)}
-            className={`flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition-all sm:text-sm ${
-              selectedDepartment === null && pathname?.startsWith("/catalogo")
-                ? "border-brand-green-700 bg-brand-green-700 text-white shadow-sm"
-                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-brand-green-500 hover:bg-brand-green-50"
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-            <span>Todos os Setores</span>
-          </button>
+      <div className="mx-auto max-w-7xl px-4 py-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-800">
+            Explore os corredores
+          </h2>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleDepClick(null)}
+              aria-pressed={
+                selectedDepartment === null &&
+                pathname?.startsWith("/catalogo")
+              }
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                selectedDepartment === null &&
+                pathname?.startsWith("/catalogo")
+                  ? "bg-brand-green-700 text-white"
+                  : "border border-slate-200 bg-white text-slate-700 hover:border-brand-green-500"
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              Todos os setores
+            </button>
+            <Link
+              href="/panfleto-de-ofertas"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                pathname?.startsWith("/panfleto-de-ofertas")
+                  ? "bg-brand-orange-500 text-white"
+                  : "border border-orange-200 bg-orange-50 text-orange-700 hover:border-orange-400"
+              }`}
+            >
+              <Newspaper className="h-4 w-4" />
+              Ofertas
+            </Link>
+            <Link
+              href="/receitas"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                pathname?.startsWith("/receitas")
+                  ? "bg-brand-green-700 text-white"
+                  : "border border-green-200 bg-green-50 text-green-800 hover:border-green-400"
+              }`}
+            >
+              <ChefHat className="h-4 w-4" />
+              Receitas
+            </Link>
+          </div>
+        </div>
 
-          {/* Shortcut Pill to Digital Tabloid */}
-          <Link
-            href="/tabloide"
-            className={`flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-extrabold transition-all sm:text-sm ${
-              pathname?.startsWith("/tabloide")
-                ? "border-brand-orange-600 bg-brand-orange-500 text-white shadow-sm"
-                : "border-brand-orange-200 bg-brand-orange-50 text-brand-orange-700 hover:border-brand-orange-500"
-            }`}
-          >
-            <Newspaper className="h-4 w-4" />
-            <span>Encarte Semanal</span>
-          </Link>
-
-          {/* Department Items */}
-          {departments.map((dep) => {
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+          {orderedDepartments.map((dep) => {
             const IconComponent = ICON_MAP[dep.iconName];
             const isSelected = selectedDepartment === dep.name;
 
@@ -99,36 +136,35 @@ export default function DepartmentNav({
               <button
                 key={dep.id}
                 type="button"
-                onClick={() =>
-                  handleDepClick(isSelected ? null : dep.name)
-                }
-                className={`group flex shrink-0 items-center gap-2.5 rounded-xl border px-3.5 py-2 text-left transition-all ${
+                onClick={() => handleDepClick(isSelected ? null : dep.name)}
+                aria-pressed={isSelected}
+                className={`group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-green-600 ${
                   isSelected
-                    ? "border-brand-orange-500 bg-brand-orange-500 text-white shadow-sm"
-                    : `${dep.bgColor} text-slate-800`
+                    ? "border-brand-green-700 bg-brand-green-700 text-white shadow-sm"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-brand-green-300 hover:bg-brand-green-50"
                 }`}
               >
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-lg transition-transform group-hover:scale-110 ${
+                <span
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
                     isSelected
-                      ? "bg-white/20 text-white"
-                      : `bg-white shadow-xs ${dep.highlightColor}`
+                      ? "bg-white/15 text-white"
+                      : `${dep.bgColor} ${dep.highlightColor}`
                   }`}
                 >
-                  <IconComponent className="h-4 w-4" />
-                </div>
-                <div>
-                  <span className="block text-xs font-bold leading-none sm:text-sm">
+                  <IconComponent className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-extrabold sm:text-sm">
                     {dep.name}
                   </span>
                   <span
-                    className={`hidden text-[10px] sm:inline-block ${
-                      isSelected ? "text-orange-100" : "text-slate-400"
+                    className={`block text-[10px] ${
+                      isSelected ? "text-green-100" : "text-slate-400"
                     }`}
                   >
-                    {dep.itemCount}+ itens
+                    {dep.itemCount}+ produtos
                   </span>
-                </div>
+                </span>
               </button>
             );
           })}

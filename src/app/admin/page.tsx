@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ShieldCheck,
@@ -45,8 +45,13 @@ import {
   Send,
   Radio,
 } from "lucide-react";
-import { DEPARTMENTS, Product } from "@/data/mockData";
-import { RETAIL_SEASONAL_CALENDAR, BioLinkItem } from "@/data/cmsData";
+import { DEPARTMENTS, Product, StoreBranch } from "@/data/mockData";
+import {
+  RETAIL_SEASONAL_CALENDAR,
+  BioLinkItem,
+  StoreSocialLink,
+} from "@/data/cmsData";
+import { MarketCompetitor } from "@/data/marketResearch";
 import { useStore } from "@/context/StoreContext";
 import { formatBRL } from "@/components/ProductCard";
 
@@ -60,7 +65,14 @@ type AdminModule =
   | "bio-cms"
   | "crm-rh"
   | "calendar"
-  | "push-notifications";
+  | "push-notifications"
+  | "store-config"
+  | "market-research";
+
+function toDateTimeLocalValue(date: Date): string {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 16);
+}
 
 export default function AdminDashboardPage() {
   const {
@@ -82,6 +94,10 @@ export default function AdminDashboardPage() {
     storeSettings,
     updateStoreSettings,
     incrementSiteVisit,
+    marketCompetitors,
+    saveMarketCompetitor,
+    deleteMarketCompetitor,
+    setMarketCompetitorPrice,
     heroBanners,
     addHeroBanner,
     updateHeroBanner,
@@ -118,6 +134,240 @@ export default function AdminDashboardPage() {
 
   // Active Dashboard Tab
   const [activeModule, setActiveModule] = useState<AdminModule>("overview");
+  const [branchDraft, setBranchDraft] = useState<StoreBranch[]>(
+    storeSettings.branches
+  );
+  const [socialLinksDraft, setSocialLinksDraft] = useState<StoreSocialLink[]>(
+    storeSettings.socialLinks
+  );
+  const [contactDraft, setContactDraft] = useState({
+    sacPhone: storeSettings.sacPhone,
+    supportEmail: storeSettings.supportEmail,
+    institutionalHours: storeSettings.institutionalHours,
+    companyCnpj: storeSettings.companyCnpj,
+  });
+  const [localSeoDraft, setLocalSeoDraft] = useState({
+    storeName: storeSettings.storeName,
+    city: storeSettings.city,
+    neighborhood: storeSettings.neighborhood,
+  });
+  const [primaryColorDraft, setPrimaryColorDraft] = useState(
+    storeSettings.primaryColor
+  );
+  const [secondaryColorDraft, setSecondaryColorDraft] = useState(
+    storeSettings.secondaryColor
+  );
+  const [isSavingStoreConfig, setIsSavingStoreConfig] = useState(false);
+  const [newCompetitorName, setNewCompetitorName] = useState("");
+  const [newCompetitorNeighborhood, setNewCompetitorNeighborhood] =
+    useState("");
+  const [marketCompetitorDrafts, setMarketCompetitorDrafts] = useState<
+    MarketCompetitor[]
+  >(marketCompetitors);
+  const [marketPriceDrafts, setMarketPriceDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [marketProductSearch, setMarketProductSearch] = useState("");
+  const [isAddingCompetitor, setIsAddingCompetitor] = useState(false);
+
+  useEffect(() => {
+    setMarketCompetitorDrafts(marketCompetitors);
+  }, [marketCompetitors.length]);
+
+  useEffect(() => {
+    setBranchDraft(storeSettings.branches);
+    setSocialLinksDraft(storeSettings.socialLinks);
+    setContactDraft({
+      sacPhone: storeSettings.sacPhone,
+      supportEmail: storeSettings.supportEmail,
+      institutionalHours: storeSettings.institutionalHours,
+      companyCnpj: storeSettings.companyCnpj,
+    });
+    setLocalSeoDraft({
+      storeName: storeSettings.storeName,
+      city: storeSettings.city,
+      neighborhood: storeSettings.neighborhood,
+    });
+    setPrimaryColorDraft(storeSettings.primaryColor);
+    setSecondaryColorDraft(storeSettings.secondaryColor);
+  }, [
+    storeSettings.branches,
+    storeSettings.socialLinks,
+    storeSettings.sacPhone,
+    storeSettings.supportEmail,
+    storeSettings.institutionalHours,
+    storeSettings.companyCnpj,
+    storeSettings.storeName,
+    storeSettings.city,
+    storeSettings.neighborhood,
+    storeSettings.primaryColor,
+    storeSettings.secondaryColor,
+  ]);
+
+  const updateBranchDraft = (
+    branchId: string,
+    updates: Partial<StoreBranch>
+  ) => {
+    setBranchDraft((current) =>
+      current.map((branch) =>
+        branch.id === branchId ? { ...branch, ...updates } : branch
+      )
+    );
+  };
+
+  const handleAddBranch = () => {
+    const id = `filial-${Date.now()}`;
+    setBranchDraft((current) => [
+      ...current,
+      {
+        id,
+        name: "Nova Filial",
+        sizeLabel: "Supermercado",
+        address: "",
+        phone: "",
+        email: "",
+        deliveryTime: "45 - 60 min",
+        minOrder: 40,
+        freeShippingThreshold: 199,
+        isOpen: true,
+        hours: "",
+      },
+    ]);
+  };
+
+  const updateSocialLinkDraft = (
+    linkId: string,
+    updates: Partial<StoreSocialLink>
+  ) => {
+    setSocialLinksDraft((current) =>
+      current.map((link) =>
+        link.id === linkId ? { ...link, ...updates } : link
+      )
+    );
+  };
+
+  const updateSocialSettings = (name: string, url: string) => {
+    const socialLinks = storeSettings.socialLinks || [];
+    const existing = socialLinks.find(
+      (link) => link.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    return {
+      socialLinks: existing
+        ? socialLinks.map((link) =>
+            link.id === existing.id ? { ...link, url } : link
+          )
+        : [...socialLinks, { id: `social-${name.toLowerCase()}`, name, url }],
+    };
+  };
+
+  const handleSaveStoreConfig = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (branchDraft.length === 0) {
+      triggerToast("Mantenha pelo menos uma filial cadastrada.");
+      return;
+    }
+    if (
+      branchDraft.some(
+        (branch) => !branch.name.trim() || !branch.address.trim()
+      )
+    ) {
+      triggerToast("Preencha o nome e o endereço de todas as filiais.");
+      return;
+    }
+
+    setIsSavingStoreConfig(true);
+    try {
+      await updateStoreSettings({
+        storeName: localSeoDraft.storeName.trim(),
+        city: localSeoDraft.city.trim(),
+        neighborhood: localSeoDraft.neighborhood.trim(),
+        branches: branchDraft,
+        socialLinks: socialLinksDraft,
+        sacPhone: contactDraft.sacPhone.trim(),
+        supportEmail: contactDraft.supportEmail.trim(),
+        institutionalHours: contactDraft.institutionalHours.trim(),
+        companyCnpj: contactDraft.companyCnpj.trim(),
+        primaryColor: primaryColorDraft,
+        secondaryColor: secondaryColorDraft,
+        instagramUrl:
+          socialLinksDraft.find(
+            (link) => link.name.trim().toLowerCase() === "instagram"
+          )?.url || "",
+        facebookUrl:
+          socialLinksDraft.find(
+            (link) => link.name.trim().toLowerCase() === "facebook"
+          )?.url || "",
+      });
+    } finally {
+      setIsSavingStoreConfig(false);
+    }
+  };
+
+  const handleAddCompetitor = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const name = newCompetitorName.trim();
+    const neighborhood = newCompetitorNeighborhood.trim();
+    if (!name || !neighborhood) {
+      triggerToast("Informe o nome e o bairro do concorrente.");
+      return;
+    }
+    const competitor: MarketCompetitor = {
+      id: `competidor-${Date.now()}`,
+      name,
+      neighborhood,
+      prices: {},
+    };
+    setIsAddingCompetitor(true);
+    try {
+      await saveMarketCompetitor(competitor);
+      setMarketCompetitorDrafts((current) => [...current, competitor]);
+      setNewCompetitorName("");
+      setNewCompetitorNeighborhood("");
+    } finally {
+      setIsAddingCompetitor(false);
+    }
+  };
+
+  const handleSaveCompetitor = async (competitor: MarketCompetitor) => {
+    await saveMarketCompetitor(competitor);
+  };
+
+  const updateCompetitorDraft = (
+    competitorId: string,
+    updates: Partial<MarketCompetitor>
+  ) => {
+    setMarketCompetitorDrafts((current) =>
+      current.map((competitor) =>
+        competitor.id === competitorId
+          ? { ...competitor, ...updates }
+          : competitor
+      )
+    );
+  };
+
+  const handleSaveCompetitorPrice = async (
+    competitor: MarketCompetitor,
+    productId: string
+  ) => {
+    const key = `${competitor.id}:${productId}`;
+    const rawValue =
+      marketPriceDrafts[key] ?? competitor.prices[productId]?.toString() ?? "";
+    if (!rawValue.trim()) {
+      await setMarketCompetitorPrice(competitor.id, productId, null);
+      setMarketPriceDrafts((current) => ({ ...current, [key]: "" }));
+      return;
+    }
+    const price = Number(rawValue.replace(",", "."));
+    if (!Number.isFinite(price) || price < 0) {
+      triggerToast("Informe um preço válido, igual ou maior que zero.");
+      return;
+    }
+    await setMarketCompetitorPrice(competitor.id, productId, price);
+    setMarketPriceDrafts((current) => ({
+      ...current,
+      [key]: price.toFixed(2),
+    }));
+  };
 
   // Module 10: Web Push Broadcast Form State
   const [pushTitle, setPushTitle] = useState<string>(
@@ -139,9 +389,13 @@ export default function AdminDashboardPage() {
     useState<string>("prod-6");
   const [flashNormalPrice, setFlashNormalPrice] = useState<string>("18.90");
   const [flashPromoPrice, setFlashPromoPrice] = useState<string>("11.90");
-  const [flashStartDate, setFlashStartDate] =
-    useState<string>("2026-10-16T08:00");
-  const [flashEndDate, setFlashEndDate] = useState<string>("2026-10-18T23:59");
+  const [flashStartDate, setFlashStartDate] = useState<string>(() =>
+    toDateTimeLocalValue(new Date())
+  );
+  const [flashDurationHours, setFlashDurationHours] = useState<string>("4");
+  const [flashEndDate, setFlashEndDate] = useState<string>(() =>
+    toDateTimeLocalValue(new Date(Date.now() + 4 * 60 * 60 * 1000))
+  );
   const [flashStockLeft, setFlashStockLeft] = useState<string>("22");
 
   // Module 3: Products & Prices State
@@ -172,7 +426,7 @@ export default function AdminDashboardPage() {
 
   // Module 4: Tabloid Uploader Form State
   const [tabloidTitle, setTabloidTitle] = useState<string>(
-    "Super Encarte Fim de Semana — Especial Churrasco & Hortifrúti"
+    "Panfleto de Ofertas — Especial Churrasco & Hortifrúti"
   );
   const [tabloidValidity, setTabloidValidity] = useState<string>(
     "Válido de 16/10 a 22/10 ou enquanto durarem os estoques"
@@ -181,7 +435,7 @@ export default function AdminDashboardPage() {
     "pdf"
   );
   const [tabloidFileName, setTabloidFileName] = useState<string>(
-    "Encarte_Semanal_Outubro_SuperVerde.pdf"
+    "Panfleto_de_Ofertas_Outubro_SuperVerde.pdf"
   );
   const [tabloidPreviewUrl, setTabloidPreviewUrl] = useState<string>(
     "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1000&q=80"
@@ -254,6 +508,29 @@ export default function AdminDashboardPage() {
       );
       setFlashPromoPrice(prod.price.toFixed(2));
       setFlashStockLeft(String(prod.stockLeftPercent ?? 25));
+      const startsAt = prod.flashStartDate
+        ? new Date(prod.flashStartDate)
+        : new Date();
+      const endsAt = prod.flashEndDate
+        ? new Date(prod.flashEndDate)
+        : new Date(startsAt.getTime() + 4 * 60 * 60 * 1000);
+      setFlashStartDate(toDateTimeLocalValue(startsAt));
+      setFlashEndDate(toDateTimeLocalValue(endsAt));
+      const requestedDuration = Math.max(
+        1,
+        Math.ceil((endsAt.getTime() - startsAt.getTime()) / (60 * 60 * 1000))
+      );
+      const supportedDurations = [1, 2, 4, 6, 12, 24];
+      setFlashDurationHours(
+        String(
+          supportedDurations.reduce((closest, current) =>
+            Math.abs(current - requestedDuration) <
+            Math.abs(closest - requestedDuration)
+              ? current
+              : closest
+          )
+        )
+      );
     }
   };
 
@@ -262,6 +539,14 @@ export default function AdminDashboardPage() {
     const normal = parseFloat(flashNormalPrice.replace(",", "."));
     const promo = parseFloat(flashPromoPrice.replace(",", "."));
     if (isNaN(normal) || isNaN(promo) || promo <= 0) return;
+    if (
+      !Number.isFinite(new Date(flashStartDate).getTime()) ||
+      !Number.isFinite(new Date(flashEndDate).getTime()) ||
+      new Date(flashEndDate).getTime() <= new Date(flashStartDate).getTime()
+    ) {
+      triggerToast("A data de término deve ser posterior ao início da oferta.");
+      return;
+    }
 
     const discountPercent =
       normal > promo ? Math.round(((normal - promo) / normal) * 100) : 15;
@@ -431,7 +716,7 @@ export default function AdminDashboardPage() {
       title: tabloidTitle.trim(),
       validity: tabloidValidity.trim(),
       fileType: tabloidFileType,
-      fileName: tabloidFileName || "Encarte_Semanal.pdf",
+      fileName: tabloidFileName || "Panfleto_de_Ofertas.pdf",
       fileUrl: tabloidPreviewUrl,
       isActive: true,
     });
@@ -516,7 +801,7 @@ export default function AdminDashboardPage() {
               Painel do Gestor SuperVerde
             </h1>
             <p className="mt-1 text-xs text-emerald-100">
-              Gerencie produtos, ofertas, encarte, PWA, pagamentos, WhatsApp, Bio do Instagram, Cartão da Loja e RH sem código
+              Gerencie produtos, ofertas, Panfleto de Ofertas, PWA, pagamentos, WhatsApp, Bio do Instagram, Cartão da Loja e RH sem código
             </p>
           </div>
 
@@ -525,7 +810,7 @@ export default function AdminDashboardPage() {
               <p className="font-bold">💡 Credenciais de Demonstração Prontas:</p>
               <p className="mt-0.5 text-[11px] text-emerald-800">
                 Basta clicar em <strong>&ldquo;Entrar no Painel&rdquo;</strong>{" "}
-                abaixo para acessar todos os 9 módulos do CMS.
+                abaixo para acessar todos os módulos do CMS.
               </p>
             </div>
 
@@ -642,7 +927,7 @@ export default function AdminDashboardPage() {
               },
               {
                 id: "tabloid",
-                label: "4. Encarte / Tabloide",
+                label: "4. Panfleto de Ofertas",
                 icon: Newspaper,
               },
               {
@@ -680,6 +965,17 @@ export default function AdminDashboardPage() {
                 label: "10. Disparar Notificações Push",
                 icon: BellRing,
                 badge: pushSubscriptions.filter((s) => s.isActive).length,
+              },
+              {
+                id: "store-config",
+                label: "11. Configurações da Loja",
+                icon: Store,
+              },
+              {
+                id: "market-research",
+                label: "12. Inteligência de Mercado",
+                icon: TrendingUp,
+                badge: marketCompetitors.length,
               },
             ].map((item) => {
               const Icon = item.icon;
@@ -762,7 +1058,7 @@ export default function AdminDashboardPage() {
               {activeModule === "products" &&
                 "Catálogo de Produtos, Preços, Estoque e Planilhas"}
               {activeModule === "tabloid" &&
-                "Gerenciador do Tabloide / Encarte Digital da Semana"}
+                "Gerenciador do Panfleto de Ofertas"}
               {activeModule === "banners" &&
                 "Gestor de Banners (1200x400px / Mini) & TopBar de Avisos"}
               {activeModule === "settings" &&
@@ -773,6 +1069,10 @@ export default function AdminDashboardPage() {
                 "Solicitações de Cartão da Loja, Clube SuperVerde & Currículos"}
               {activeModule === "calendar" &&
                 "Calendário Sazonal do Varejo & Ideias de Campanhas"}
+              {activeModule === "store-config" &&
+                "Configurações Institucionais da Loja"}
+              {activeModule === "market-research" &&
+                "Inteligência de Mercado / Pesquisa de Concorrentes"}
             </h1>
             <p className="text-xs text-slate-500">
               Todas as alterações feitas aqui atualizam a vitrine, o checkout e o banco de dados imediatamente.
@@ -892,11 +1192,11 @@ export default function AdminDashboardPage() {
                   </button>
                 </div>
 
-                {/* Contador Funcional de Visualizações do Encarte Digital */}
+                {/* Contador de visualizações do Panfleto de Ofertas */}
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                      Visualizações do Encarte
+                      Visualizações do Panfleto de Ofertas
                     </span>
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
                       <Eye className="h-5 w-5" />
@@ -1167,7 +1467,7 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
                       <label className="mb-1 block text-xs font-bold text-slate-700">
                         Data/Hora de Início *
@@ -1176,9 +1476,56 @@ export default function AdminDashboardPage() {
                         type="datetime-local"
                         required
                         value={flashStartDate}
-                        onChange={(e) => setFlashStartDate(e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setFlashStartDate(value);
+                          const start = new Date(value);
+                          const hours = Number(flashDurationHours);
+                          if (
+                            Number.isFinite(start.getTime()) &&
+                            Number.isFinite(hours)
+                          ) {
+                            setFlashEndDate(
+                              toDateTimeLocalValue(
+                                new Date(start.getTime() + hours * 60 * 60 * 1000)
+                              )
+                            );
+                          }
+                        }}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
                       />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-700">
+                        Duração da Oferta *
+                      </label>
+                      <select
+                        value={flashDurationHours}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setFlashDurationHours(value);
+                          const start = new Date(flashStartDate);
+                          const hours = Number(value);
+                          if (
+                            Number.isFinite(start.getTime()) &&
+                            Number.isFinite(hours)
+                          ) {
+                            setFlashEndDate(
+                              toDateTimeLocalValue(
+                                new Date(start.getTime() + hours * 60 * 60 * 1000)
+                              )
+                            );
+                          }
+                        }}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700"
+                      >
+                        <option value="1">1 hora</option>
+                        <option value="2">2 horas</option>
+                        <option value="4">4 horas</option>
+                        <option value="6">6 horas</option>
+                        <option value="12">12 horas</option>
+                        <option value="24">24 horas</option>
+                      </select>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-bold text-slate-700">
@@ -1478,7 +1825,7 @@ export default function AdminDashboardPage() {
           )}
 
           {/* ==================================================================
-              MODULE 4: GERENCIADOR DO TABLOIDE / ENCARTE DIGITAL
+              MODULE 4: GERENCIADOR DO PANFLETO DE OFERTAS
              ================================================================== */}
           {activeModule === "tabloid" && (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
@@ -1493,17 +1840,17 @@ export default function AdminDashboardPage() {
                     </div>
                     <div>
                       <h2 className="text-base font-black text-slate-900">
-                        Publicar Novo Encarte / Tabloide
+                        Publicar Novo Panfleto de Ofertas
                       </h2>
                       <p className="text-xs text-slate-500">
-                        Envie a imagem ou PDF do jornalzinho da semana
+                        Envie a imagem ou PDF do Panfleto de Ofertas
                       </p>
                     </div>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-xs font-bold text-slate-700">
-                      Título da Campanha / Encarte *
+                      Título do Panfleto de Ofertas *
                     </label>
                     <input
                       type="text"
@@ -1529,12 +1876,12 @@ export default function AdminDashboardPage() {
 
                   <div>
                     <label className="mb-1.5 block text-xs font-bold text-slate-700">
-                      Arquivo do Encarte Físico (Imagem ou PDF)
+                      Arquivo do Panfleto de Ofertas (Imagem ou PDF)
                     </label>
                     <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-brand-green-400 bg-brand-green-50/50 p-5 text-center transition hover:bg-brand-green-50">
                       <Upload className="mb-2 h-7 w-7 text-brand-green-700" />
                       <span className="text-xs font-extrabold text-brand-green-900">
-                        Selecionar Imagem (JPG/PNG) ou PDF do Encarte
+                        Selecionar imagem (JPG/PNG) ou PDF do Panfleto de Ofertas
                       </span>
                       <span className="mt-1 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 shadow-2xs">
                         {tabloidFileName}
@@ -1553,7 +1900,7 @@ export default function AdminDashboardPage() {
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-green-700 py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-brand-green-800"
                   >
                     <Sparkles className="h-4 w-4 text-brand-orange-400" />
-                    <span>Publicar e Definir como Encarte Vigente</span>
+                    <span>Publicar e Definir como Panfleto de Ofertas vigente</span>
                   </button>
                 </form>
               </div>
@@ -1561,7 +1908,7 @@ export default function AdminDashboardPage() {
               <div className="xl:col-span-7 space-y-4">
                 <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
                   <h2 className="text-base font-black text-slate-900">
-                    Edições do Encarte & Contador de Visualizações
+                    Edições do Panfleto de Ofertas & Contador de Visualizações
                   </h2>
                   <div className="mt-4 space-y-3">
                     {tabloidEditions.map((ed) => (
@@ -2017,7 +2364,7 @@ export default function AdminDashboardPage() {
                       </h3>
                       <p className="mt-1 text-xs text-slate-600">
                         Se desativado, o site funciona exclusivamente como{" "}
-                        <strong>Vitrine e Tabloide Digital</strong> (os clientes visualizam preços e encartes, sem checkout online).
+                        <strong>Vitrine e Panfleto de Ofertas</strong> (os clientes visualizam preços e promoções, sem checkout online).
                       </p>
                     </div>
                     <button
@@ -2366,9 +2713,12 @@ export default function AdminDashboardPage() {
                       <input
                         type="url"
                         value={storeSettings.instagramUrl}
-                        onChange={(e) =>
-                          updateStoreSettings({ instagramUrl: e.target.value })
-                        }
+                        onChange={(e) => {
+                          updateStoreSettings({
+                            instagramUrl: e.target.value,
+                            ...updateSocialSettings("Instagram", e.target.value),
+                          });
+                        }}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
                       />
                     </div>
@@ -2379,9 +2729,12 @@ export default function AdminDashboardPage() {
                       <input
                         type="url"
                         value={storeSettings.facebookUrl}
-                        onChange={(e) =>
-                          updateStoreSettings({ facebookUrl: e.target.value })
-                        }
+                        onChange={(e) => {
+                          updateStoreSettings({
+                            facebookUrl: e.target.value,
+                            ...updateSocialSettings("Facebook", e.target.value),
+                          });
+                        }}
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
                       />
                     </div>
@@ -2452,6 +2805,767 @@ export default function AdminDashboardPage() {
             </div>
           )}
 
+          {activeModule === "market-research" && (
+            <div className="space-y-6">
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">
+                      Cadastro de concorrentes locais
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500">
+                      Cadastre mercados por nome e bairro. Os dados e preços coletados são mantidos no Supabase e em cache local para continuidade do trabalho.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                      isSupabaseConnected
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {isSupabaseConnected
+                      ? "Sincronização Supabase ativa"
+                      : "Verifique a conexão Supabase"}
+                  </span>
+                </div>
+
+                <form
+                  onSubmit={handleAddCompetitor}
+                  className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]"
+                >
+                  <label className="text-xs font-bold text-slate-700">
+                    Nome do concorrente *
+                    <input
+                      required
+                      value={newCompetitorName}
+                      onChange={(event) =>
+                        setNewCompetitorName(event.target.value)
+                      }
+                      placeholder="Ex.: Mercado do Bairro"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-medium"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    Bairro *
+                    <input
+                      required
+                      value={newCompetitorNeighborhood}
+                      onChange={(event) =>
+                        setNewCompetitorNeighborhood(event.target.value)
+                      }
+                      placeholder="Ex.: Jardins"
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-medium"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={isAddingCompetitor}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-green-700 px-4 py-2.5 text-xs font-extrabold text-white hover:bg-brand-green-800 disabled:opacity-60"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar concorrente
+                  </button>
+                </form>
+
+                {marketCompetitorDrafts.length > 0 && (
+                  <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {marketCompetitorDrafts.map((competitor) => (
+                      <div
+                        key={competitor.id}
+                        className="grid grid-cols-1 items-end gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_auto_auto]"
+                      >
+                        <label className="text-[11px] font-bold text-slate-600">
+                          Concorrente
+                          <input
+                            value={competitor.name}
+                            onChange={(event) =>
+                              updateCompetitorDraft(competitor.id, {
+                                name: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800"
+                          />
+                        </label>
+                        <label className="text-[11px] font-bold text-slate-600">
+                          Bairro
+                          <input
+                            value={competitor.neighborhood}
+                            onChange={(event) =>
+                              updateCompetitorDraft(competitor.id, {
+                                neighborhood: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveCompetitor(competitor)}
+                          className="rounded-lg bg-brand-green-700 px-3 py-2 text-xs font-bold text-white hover:bg-brand-green-800"
+                        >
+                          Salvar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void deleteMarketCompetitor(competitor.id)
+                          }
+                          aria-label={`Remover concorrente ${competitor.name}`}
+                          className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xs">
+                <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 p-5">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">
+                      Grade de pesquisa de preços
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Digite o preço observado; ao sair do campo ele será salvo e a diferença será calculada sobre o preço atual SuperVerde.
+                    </p>
+                  </div>
+                  <label className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <input
+                      value={marketProductSearch}
+                      onChange={(event) =>
+                        setMarketProductSearch(event.target.value)
+                      }
+                      placeholder="Filtrar produtos..."
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-xs"
+                    />
+                  </label>
+                </div>
+
+                {marketCompetitorDrafts.length === 0 ? (
+                  <div className="p-10 text-center">
+                    <TrendingUp className="mx-auto h-8 w-8 text-slate-300" />
+                    <p className="mt-2 text-sm font-bold text-slate-700">
+                      Cadastre um concorrente para iniciar a pesquisa.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="max-h-[65vh] overflow-auto">
+                    <table className="min-w-full border-separate border-spacing-0 text-left">
+                      <thead className="sticky top-0 z-10 bg-slate-100">
+                        <tr>
+                          <th className="sticky left-0 z-20 min-w-64 border-b border-slate-200 bg-slate-100 px-4 py-3 text-[11px] font-black uppercase tracking-wide text-slate-600">
+                            Produto
+                          </th>
+                          <th className="min-w-36 border-b border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-wide text-brand-green-800">
+                            Nosso preço
+                          </th>
+                          {marketCompetitorDrafts.map((competitor) => (
+                            <th
+                              key={competitor.id}
+                              className="min-w-48 border-b border-slate-200 px-4 py-3 text-[11px] font-black uppercase tracking-wide text-slate-700"
+                            >
+                              {competitor.name}
+                              <span className="mt-0.5 block font-medium normal-case text-slate-500">
+                                {competitor.neighborhood}
+                              </span>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allProducts
+                          .filter(
+                            (product) =>
+                              product.isActive !== false &&
+                              (!marketProductSearch.trim() ||
+                                `${product.name} ${product.brand} ${product.sku}`
+                                  .toLowerCase()
+                                  .includes(
+                                    marketProductSearch.trim().toLowerCase()
+                                  ))
+                          )
+                          .map((product) => (
+                            <tr key={product.id} className="hover:bg-slate-50">
+                              <td className="sticky left-0 border-b border-slate-100 bg-white px-4 py-3">
+                                <span className="block text-xs font-bold text-slate-800">
+                                  {product.name}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  {product.brand} · {product.weightVolume}
+                                </span>
+                              </td>
+                              <td className="border-b border-slate-100 px-4 py-3">
+                                <span className="text-sm font-black text-brand-green-800">
+                                  {formatBRL(product.price)}
+                                </span>
+                              </td>
+                              {marketCompetitorDrafts.map((competitor) => {
+                                const key = `${competitor.id}:${product.id}`;
+                                const storedPrice =
+                                  competitor.prices[product.id];
+                                const draftPrice =
+                                  marketPriceDrafts[key] ??
+                                  (storedPrice === undefined
+                                    ? ""
+                                    : storedPrice.toFixed(2));
+                                const competitorPrice =
+                                  draftPrice.trim() === ""
+                                    ? undefined
+                                    : Number(draftPrice.replace(",", "."));
+                                const difference =
+                                  competitorPrice !== undefined &&
+                                  Number.isFinite(competitorPrice) &&
+                                  product.price > 0
+                                    ? ((competitorPrice - product.price) /
+                                        product.price) *
+                                      100
+                                    : null;
+                                return (
+                                  <td
+                                    key={competitor.id}
+                                    className="border-b border-slate-100 px-4 py-2.5"
+                                  >
+                                    <div className="flex min-w-40 items-center gap-2">
+                                      <span className="text-xs text-slate-500">
+                                        R$
+                                      </span>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={draftPrice}
+                                        onChange={(event) =>
+                                          setMarketPriceDrafts((current) => ({
+                                            ...current,
+                                            [key]: event.target.value,
+                                          }))
+                                        }
+                                        onBlur={() =>
+                                          void handleSaveCompetitorPrice(
+                                            competitor,
+                                            product.id
+                                          )
+                                        }
+                                        onKeyDown={(event) => {
+                                          if (event.key === "Enter") {
+                                            event.currentTarget.blur();
+                                          }
+                                        }}
+                                        aria-label={`Preço de ${product.name} em ${competitor.name}`}
+                                        className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold"
+                                      />
+                                    </div>
+                                    {difference !== null && (
+                                      <span
+                                        className={`mt-1 block text-[10px] font-extrabold ${
+                                          difference > 0
+                                            ? "text-emerald-700"
+                                            : difference < 0
+                                              ? "text-red-600"
+                                              : "text-slate-500"
+                                        }`}
+                                      >
+                                        {difference === 0
+                                          ? "Mesmo preço"
+                                          : `${Math.abs(difference).toFixed(1)}% ${
+                                              difference > 0
+                                                ? "acima do nosso"
+                                                : "abaixo do nosso"
+                                            }`}
+                                      </span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {activeModule === "store-config" && (
+            <form onSubmit={handleSaveStoreConfig} className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand-green-200 bg-brand-green-50 p-4">
+                <div>
+                  <h2 className="text-sm font-black text-brand-green-900">
+                    Dados públicos, filiais e identidade visual
+                  </h2>
+                  <p className="mt-1 text-xs text-brand-green-800">
+                    Os dados salvos são compartilhados com a vitrine e sincronizados com a tabela configuracoes_loja do Supabase.
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-extrabold ${
+                    isSupabaseConnected
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-amber-100 text-amber-800"
+                  }`}
+                >
+                  {isSupabaseConnected
+                    ? "Supabase conectado"
+                    : "Modo local / Supabase indisponível"}
+                </span>
+              </div>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <div className="mb-4 border-b border-slate-100 pb-4">
+                  <h2 className="text-base font-black text-slate-900">
+                    Identificação e região para SEO local
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Estes dados são usados nos títulos e descrições de busca do site.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className="text-xs font-bold text-slate-700">
+                    Nome do supermercado *
+                    <input
+                      required
+                      value={localSeoDraft.storeName}
+                      onChange={(event) =>
+                        setLocalSeoDraft((current) => ({
+                          ...current,
+                          storeName: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    Cidade
+                    <input
+                      value={localSeoDraft.city}
+                      onChange={(event) =>
+                        setLocalSeoDraft((current) => ({
+                          ...current,
+                          city: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                      placeholder="Ex.: São Paulo"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    Bairro principal
+                    <input
+                      value={localSeoDraft.neighborhood}
+                      onChange={(event) =>
+                        setLocalSeoDraft((current) => ({
+                          ...current,
+                          neighborhood: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                      placeholder="Ex.: Jardins"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">
+                      Filiais e endereços
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Gerencie endereços, contato, horário e parâmetros de entrega de cada unidade.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddBranch}
+                    className="inline-flex items-center gap-2 rounded-xl bg-brand-green-700 px-3.5 py-2.5 text-xs font-extrabold text-white hover:bg-brand-green-800"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar filial
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {branchDraft.map((branch, index) => (
+                    <div
+                      key={branch.id}
+                      className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <h3 className="text-sm font-black text-slate-800">
+                          Filial {index + 1}
+                        </h3>
+                        <div className="flex items-center gap-3">
+                          <label className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={branch.isOpen}
+                              onChange={(event) =>
+                                updateBranchDraft(branch.id, {
+                                  isOpen: event.target.checked,
+                                })
+                              }
+                              className="h-4 w-4 accent-brand-green-700"
+                            />
+                            Aberta
+                          </label>
+                          <button
+                            type="button"
+                            disabled={branchDraft.length <= 1}
+                            onClick={() =>
+                              setBranchDraft((current) =>
+                                current.filter((item) => item.id !== branch.id)
+                              )
+                            }
+                            aria-label={`Remover filial ${branch.name}`}
+                            className="rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <label className="text-xs font-bold text-slate-700">
+                          Nome da filial *
+                          <input
+                            required
+                            value={branch.name}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                name: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Porte / identificação
+                          <input
+                            value={branch.sizeLabel}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                sizeLabel: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Endereço *
+                          <input
+                            required
+                            value={branch.address}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                address: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Telefone
+                          <input
+                            type="tel"
+                            value={branch.phone || ""}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                phone: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          E-mail
+                          <input
+                            type="email"
+                            value={branch.email || ""}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                email: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Horário de atendimento
+                          <input
+                            value={branch.hours}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                hours: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Prazo de entrega
+                          <input
+                            value={branch.deliveryTime}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                deliveryTime: event.target.value,
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Pedido mínimo (R$)
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={branch.minOrder}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                minOrder: Number(event.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                        <label className="text-xs font-bold text-slate-700">
+                          Frete grátis a partir de (R$)
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={branch.freeShippingThreshold}
+                            onChange={(event) =>
+                              updateBranchDraft(branch.id, {
+                                freeShippingThreshold: Number(event.target.value),
+                              })
+                            }
+                            className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <h2 className="mb-4 border-b border-slate-100 pb-3 text-base font-black text-slate-900">
+                  Contatos institucionais e horários
+                </h2>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-bold text-slate-700">
+                    Telefone SAC / Televendas
+                    <input
+                      type="tel"
+                      value={contactDraft.sacPhone}
+                      onChange={(event) =>
+                        setContactDraft((current) => ({
+                          ...current,
+                          sacPhone: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    E-mail de atendimento
+                    <input
+                      type="email"
+                      value={contactDraft.supportEmail}
+                      onChange={(event) =>
+                        setContactDraft((current) => ({
+                          ...current,
+                          supportEmail: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    Horário institucional
+                    <input
+                      value={contactDraft.institutionalHours}
+                      onChange={(event) =>
+                        setContactDraft((current) => ({
+                          ...current,
+                          institutionalHours: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium"
+                    />
+                  </label>
+                  <label className="text-xs font-bold text-slate-700">
+                    CNPJ
+                    <input
+                      value={contactDraft.companyCnpj}
+                      onChange={(event) =>
+                        setContactDraft((current) => ({
+                          ...current,
+                          companyCnpj: event.target.value,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div>
+                    <h2 className="text-base font-black text-slate-900">
+                      Redes sociais
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Os links ativos são exibidos no rodapé da loja.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSocialLinksDraft((current) => [
+                        ...current,
+                        {
+                          id: `social-${Date.now()}`,
+                          name: "",
+                          url: "",
+                        },
+                      ])
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar rede
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {socialLinksDraft.map((link) => (
+                    <div
+                      key={link.id}
+                      className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_2fr_auto]"
+                    >
+                      <label className="text-xs font-bold text-slate-700">
+                        Rede
+                        <input
+                          value={link.name}
+                          onChange={(event) =>
+                            updateSocialLinkDraft(link.id, {
+                              name: event.target.value,
+                            })
+                          }
+                          placeholder="Ex.: TikTok"
+                          className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium"
+                        />
+                      </label>
+                      <label className="text-xs font-bold text-slate-700">
+                        Link
+                        <input
+                          type="url"
+                          value={link.url}
+                          onChange={(event) =>
+                            updateSocialLinkDraft(link.id, {
+                              url: event.target.value,
+                            })
+                          }
+                          placeholder="https://"
+                          className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-medium"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSocialLinksDraft((current) =>
+                            current.filter((item) => item.id !== link.id)
+                          )
+                        }
+                        aria-label={`Remover rede social ${link.name || "sem nome"}`}
+                        className="rounded-xl p-2.5 text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
+                <h2 className="mb-2 text-base font-black text-slate-900">
+                  Paleta de cores da loja
+                </h2>
+                <p className="mb-4 text-xs text-slate-500">
+                  As cores principais atualizam os tons de verde e laranja usados em botões, destaques e navegação.
+                </p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-xs font-bold text-slate-700">
+                    <input
+                      type="color"
+                      value={primaryColorDraft}
+                      onChange={(event) =>
+                        setPrimaryColorDraft(event.target.value)
+                      }
+                      className="h-12 w-16 cursor-pointer rounded-lg border-0 bg-transparent"
+                    />
+                    <span>
+                      Cor primária
+                      <span className="mt-1 block font-mono text-slate-500">
+                        {primaryColorDraft}
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 text-xs font-bold text-slate-700">
+                    <input
+                      type="color"
+                      value={secondaryColorDraft}
+                      onChange={(event) =>
+                        setSecondaryColorDraft(event.target.value)
+                      }
+                      className="h-12 w-16 cursor-pointer rounded-lg border-0 bg-transparent"
+                    />
+                    <span>
+                      Cor de destaque
+                      <span className="mt-1 block font-mono text-slate-500">
+                        {secondaryColorDraft}
+                      </span>
+                    </span>
+                  </label>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <span
+                    className="rounded-lg px-3 py-2 text-xs font-bold text-white"
+                    style={{ backgroundColor: primaryColorDraft }}
+                  >
+                    Prévia de botão
+                  </span>
+                  <span
+                    className="rounded-lg px-3 py-2 text-xs font-bold text-white"
+                    style={{ backgroundColor: secondaryColorDraft }}
+                  >
+                    Prévia de destaque
+                  </span>
+                </div>
+              </section>
+
+              <div className="sticky bottom-0 flex justify-end border-t border-slate-200 bg-white/95 py-4 backdrop-blur">
+                <button
+                  type="submit"
+                  disabled={isSavingStoreConfig}
+                  className="inline-flex items-center gap-2 rounded-xl bg-brand-green-700 px-6 py-3 text-sm font-black text-white shadow-sm transition hover:bg-brand-green-800 disabled:cursor-wait disabled:opacity-60"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {isSavingStoreConfig
+                    ? "Salvando..."
+                    : "Salvar configurações da loja"}
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* ==================================================================
               MODULE 7: PERSONALIZAR PÁGINA DE BIO DO INSTAGRAM (/bio)
              ================================================================== */}
@@ -2468,7 +3582,7 @@ export default function AdminDashboardPage() {
                         Adicionar Novo Botão na Bio (/bio)
                       </h2>
                       <p className="text-xs text-slate-500">
-                        Crie atalhos para campanhas, encarte ou WhatsApp
+                        Crie atalhos para campanhas, Panfleto de Ofertas ou WhatsApp
                       </p>
                     </div>
                     <Link
@@ -2536,7 +3650,7 @@ export default function AdminDashboardPage() {
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold"
                       >
                         <option value="flash">Oferta Relâmpago</option>
-                        <option value="tabloid">Encarte Digital</option>
+                        <option value="tabloid">Panfleto de Ofertas Digital</option>
                         <option value="whatsapp">WhatsApp</option>
                         <option value="club">Clube de Descontos</option>
                         <option value="card">Cartão da Loja</option>
@@ -2923,7 +4037,7 @@ export default function AdminDashboardPage() {
                   Calendário Sazonal do Varejo & Ideias de Postagens
                 </h2>
                 <p className="mt-1 text-xs text-emerald-100">
-                  Planeje seus encartes, ilhas promocionais e postagens de Instagram/WhatsApp com antecedência para vender mais o ano inteiro.
+                  Planeje seus Panfletos de Ofertas, ilhas promocionais e postagens de Instagram/WhatsApp com antecedência para vender mais o ano inteiro.
                 </p>
               </div>
 
@@ -2956,7 +4070,7 @@ export default function AdminDashboardPage() {
 
                       <div className="mt-3">
                         <span className="block text-[11px] font-bold text-slate-500">
-                          🛒 Produtos Âncora para o Encarte:
+                          🛒 Produtos Âncora para o Panfleto de Ofertas:
                         </span>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {ev.anchorProducts.map((prod) => (
@@ -3039,7 +4153,7 @@ export default function AdminDashboardPage() {
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      Envie alertas instantâneos de Ofertas Relâmpago e do Encarte Semanal direto para o celular e computador dos clientes inscritos.
+                      Envie alertas instantâneos de Ofertas Relâmpago e do Panfleto de Ofertas direto para o celular e computador dos clientes inscritos.
                     </p>
                   </div>
                 </div>
@@ -3144,7 +4258,7 @@ export default function AdminDashboardPage() {
                           title:
                             "⚡ Oferta Relâmpago: Picanha Maturada com 24% OFF!",
                           message:
-                            "Só nas próximas horas no SuperVerde: Picanha bovina e cerveja puro malte com preço de encarte. Toque para pedir!",
+                            "Só nas próximas horas no SuperVerde: Picanha bovina e cerveja puro malte com preço especial. Toque para pedir!",
                           url: "/#ofertas-relampago",
                         },
                         {
@@ -3156,12 +4270,12 @@ export default function AdminDashboardPage() {
                           url: "/catalogo",
                         },
                         {
-                          label: "📰 Novo Encarte Semanal",
+                          label: "📰 Novo Panfleto de Ofertas",
                           title:
-                            "📰 Novo Encarte da Semana Disponível no SuperVerde!",
+                            "📰 Novo Panfleto de Ofertas disponível no SuperVerde!",
                           message:
-                            "Folheie agora o tabloide interativo e adicione suas ofertas favoritas direto no carrinho.",
-                          url: "/tabloide",
+                            "Folheie agora o Panfleto de Ofertas e adicione suas ofertas favoritas direto no carrinho.",
+                          url: "/panfleto-de-ofertas",
                         },
                         {
                           label: "💚 Clube SuperVerde VIP",
@@ -3248,13 +4362,13 @@ export default function AdminDashboardPage() {
                         required
                         value={pushTargetUrl}
                         onChange={(e) => setPushTargetUrl(e.target.value)}
-                        placeholder="/tabloide ou /#ofertas-relampago"
+                        placeholder="/panfleto-de-ofertas ou /#ofertas-relampago"
                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-mono text-slate-800 focus:border-brand-green-600 focus:bg-white focus:outline-none"
                       />
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {[
                           { label: "Ofertas Relâmpago", url: "/#ofertas-relampago" },
-                          { label: "Encarte Digital", url: "/tabloide" },
+                          { label: "Panfleto de Ofertas", url: "/panfleto-de-ofertas" },
                           { label: "Catálogo Completo", url: "/catalogo" },
                           { label: "Clube de Descontos", url: "/clube-descontos" },
                           { label: "Cartão da Loja", url: "/cartao-loja" },

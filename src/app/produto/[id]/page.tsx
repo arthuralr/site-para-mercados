@@ -26,6 +26,12 @@ import ProductCard, { formatBRL } from "@/components/ProductCard";
 import Footer from "@/components/Footer";
 import { DEPARTMENTS } from "@/data/mockData";
 import { useStore } from "@/context/StoreContext";
+import {
+  formatProductQuantity,
+  formatWeightOption,
+  isSoldByWeight,
+  WEIGHT_OPTIONS_KG,
+} from "@/lib/productUnits";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -53,6 +59,9 @@ export default function ProductDetailPage() {
   const [selectedVolume, setSelectedVolume] = useState<string>(
     product.volumeOptions?.[0] || product.weightVolume
   );
+  const [selectedWeightKg, setSelectedWeightKg] = useState<number>(
+    WEIGHT_OPTIONS_KG[0]
+  );
   const [pickerNote, setPickerNote] = useState<string>("");
 
   const gallery =
@@ -61,6 +70,7 @@ export default function ProductDetailPage() {
       : [product.image];
 
   const quantityInCart = cart[product.id] || 0;
+  const isWeightProduct = isSoldByWeight(product);
   const isFavorite = favorites.includes(product.id);
 
   // "Quem comprou também levou" — prioritize same department or complementary items
@@ -232,35 +242,38 @@ export default function ProductDetailPage() {
               </div>
 
               {/* Weight / Volume Selector */}
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                    <Scale className="h-4 w-4 text-brand-green-700" />
-                    Peso / Volume da Embalagem:
-                  </span>
-                  <span className="text-xs font-bold text-brand-green-700">
-                    Unidade padrão: {product.weightVolume} ({product.unit})
-                  </span>
+              {!isWeightProduct && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-slate-600">
+                      <Scale className="h-4 w-4 text-brand-green-700" />
+                      Peso / Volume da Embalagem:
+                    </span>
+                    <span className="text-xs font-bold text-brand-green-700">
+                      Unidade padrão: {product.weightVolume} ({product.unit})
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {(product.volumeOptions || [product.weightVolume]).map(
+                      (option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => setSelectedVolume(option)}
+                          className={`rounded-xl border px-3.5 py-2 text-xs font-extrabold transition ${
+                            selectedVolume === option
+                              ? "border-brand-green-700 bg-brand-green-700 text-white shadow-xs"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-brand-green-500"
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {(product.volumeOptions || [product.weightVolume]).map(
-                    (option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => setSelectedVolume(option)}
-                        className={`rounded-xl border px-3.5 py-2 text-xs font-extrabold transition ${
-                          selectedVolume === option
-                            ? "border-brand-green-700 bg-brand-green-700 text-white shadow-xs"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-brand-green-500"
-                        }`}
-                      >
-                        {option}
-                      </button>
-                    )
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* Pricing Box */}
               <div className="rounded-2xl border-2 border-brand-green-600/20 bg-brand-green-50/40 p-4 sm:p-5">
@@ -281,9 +294,17 @@ export default function ProductDetailPage() {
                         {formatBRL(product.price)}
                       </span>
                       <span className="text-sm font-semibold text-slate-500">
-                        / {product.unit}
+                        / {isWeightProduct ? "kg" : product.unit}
                       </span>
                     </div>
+                    {isWeightProduct && (
+                      <p className="mt-1 text-xs font-semibold text-slate-600">
+                        Total estimado ({formatWeightOption(selectedWeightKg)}):{" "}
+                        <span className="text-brand-green-800">
+                          {formatBRL(product.price * selectedWeightKg)}
+                        </span>
+                      </p>
+                    )}
 
                     {product.clubPrice && (
                       <div className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-brand-green-700 px-3 py-1 text-xs font-bold text-white">
@@ -300,7 +321,12 @@ export default function ProductDetailPage() {
                     {quantityInCart === 0 ? (
                       <button
                         type="button"
-                        onClick={() => addToCart(product, 1)}
+                        onClick={() =>
+                          addToCart(
+                            product,
+                            isWeightProduct ? selectedWeightKg : 1
+                          )
+                        }
                         className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-brand-green-600 px-6 py-4 text-sm font-extrabold text-white shadow-lg transition hover:bg-brand-green-700 active:scale-95"
                       >
                         <ShoppingCart className="h-5 w-5" />
@@ -317,7 +343,7 @@ export default function ProductDetailPage() {
                         </button>
                         <div className="text-center">
                           <span className="block text-base font-black text-brand-green-800">
-                            {quantityInCart} no carrinho
+                            {formatProductQuantity(product, quantityInCart)} no carrinho
                           </span>
                           <span className="block text-[11px] font-semibold text-slate-500">
                             Subtotal: {formatBRL(product.price * quantityInCart)}
@@ -325,7 +351,7 @@ export default function ProductDetailPage() {
                         </div>
                         <button
                           type="button"
-                          onClick={() => addToCart(product, 1)}
+                          onClick={() => addToCart(product)}
                           className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-green-600 text-white hover:bg-brand-green-700"
                         >
                           <Plus className="h-5 w-5" />

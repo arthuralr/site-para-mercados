@@ -1,4 +1,16 @@
+import { STORE_BRANCHES, StoreBranch } from "@/data/mockData";
+
+export interface StoreSocialLink {
+  id: string;
+  name: string;
+  url: string;
+}
+
 export interface StoreSettings {
+  storeName: string;
+  city: string;
+  neighborhood: string;
+
   // 1. TopBar (Faixa de Avisos no Topo)
   topBarEnabled: boolean;
   topBarText: string;
@@ -33,6 +45,10 @@ export interface StoreSettings {
   ifoodStoreUrl: string;
   instagramUrl: string;
   facebookUrl: string;
+  socialLinks: StoreSocialLink[];
+  branches: StoreBranch[];
+  primaryColor: string;
+  secondaryColor: string;
 
   // 5. Recursos de Pré-Cadastro
   storeCardEnabled: boolean;
@@ -174,13 +190,17 @@ export interface RetailCalendarEvent {
 }
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
+  storeName: "SuperVerde",
+  city: "",
+  neighborhood: "",
+
   // 1. TopBar
   topBarEnabled: true,
   topBarText:
     "🔥 SUPER QUARTA VERDE & FESTIVAL DO CHURRASCO: Frete Grátis acima de R$ 199 + Descontos exclusivos no Clube SuperVerde!",
   topBarBgColor: "orange",
-  topBarCtaText: "Ver Encarte da Semana",
-  topBarCtaLink: "/tabloide",
+  topBarCtaText: "Ver Panfleto de Ofertas",
+  topBarCtaLink: "/panfleto-de-ofertas",
 
   // 2. PWA, App Stores & Web Push
   pwaBannerEnabled: true,
@@ -214,6 +234,21 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   ifoodStoreUrl: "https://www.ifood.com.br/mercados",
   instagramUrl: "https://instagram.com/superverdemercado",
   facebookUrl: "https://facebook.com/superverdemercado",
+  socialLinks: [
+    {
+      id: "social-instagram",
+      name: "Instagram",
+      url: "https://instagram.com/superverdemercado",
+    },
+    {
+      id: "social-facebook",
+      name: "Facebook",
+      url: "https://facebook.com/superverdemercado",
+    },
+  ],
+  branches: STORE_BRANCHES,
+  primaryColor: "#16803d",
+  secondaryColor: "#f97316",
 
   // 5. Recursos de Pré-Cadastro
   storeCardEnabled: true,
@@ -285,9 +320,9 @@ export const DEFAULT_BIO_LINKS: BioLinkItem[] = [
   },
   {
     id: "bio-2",
-    title: "📰 Encarte Digital da Semana (Tabloide Interativo)",
-    subtitle: "Folheie o jornalzinho de ofertas e clique nos itens para comprar",
-    url: "/tabloide",
+    title: "📰 Panfleto de Ofertas Digital da Semana",
+    subtitle: "Folheie o Panfleto de Ofertas e clique nos itens para comprar",
+    url: "/panfleto-de-ofertas",
     badge: "Novo Folheto",
     iconType: "tabloid",
     highlight: true,
@@ -471,7 +506,7 @@ export const RETAIL_SEASONAL_CALENDAR: RetailCalendarEvent[] = [
       "Exposição nobre de Bacalhau, Filé de Tilápia/Salmão, Azeites Extra Virgem, Vinhos e Chocolates/Colombas Pascais produzidas na padaria própria.",
     anchorProducts: ["Azeite Extra Virgem Gallo", "Filé de Peixe", "Vinho Tinto Chileno", "Ovos de Páscoa & Chocolates"],
     socialMediaIdea:
-      "Vídeo curto mostrando a harmonização de Peixes + Azeite + Vinho com ofertas do Tabloide Digital.",
+      "Vídeo curto mostrando a harmonização de Peixes + Azeite + Vinho com ofertas do Panfleto de Ofertas.",
   },
   {
     id: "cal-mai",
@@ -528,7 +563,7 @@ export const RETAIL_SEASONAL_CALENDAR: RetailCalendarEvent[] = [
     title: "Mês das Crianças & Aniversário SuperVerde",
     category: "Mega Campanha",
     commercialAction:
-      "Festa de Aniversário da rede com sorteio de vales-compra, ofertas de impacto na capa do encarte e seção especial de guloseimas e sorvetes.",
+      "Festa de Aniversário da rede com sorteio de vales-compra, ofertas de impacto na capa do Panfleto de Ofertas e seção especial de guloseimas e sorvetes.",
     anchorProducts: ["Sorvetes 2L", "Biscoitos e Chocolates", "Itens de Mercearia Básica", "Refrigerantes e Sucos"],
     socialMediaIdea:
       "Live rápida na loja mostrando as ofertas de aniversário e o corredor premiado.",
@@ -614,10 +649,10 @@ export const INITIAL_PUSH_CAMPAIGNS: PushCampaignRecord[] = [
   },
   {
     id: "PUSH-CAMP-01",
-    title: "📰 Novo Encarte Digital da Semana Disponível!",
+    title: "📰 Novo Panfleto de Ofertas Disponível!",
     message:
-      "O jornalzinho da Quarta Verde já está no ar com mais de 40 itens em promoção. Toque para folhear e comprar direto pelo celular!",
-    targetUrl: "/tabloide",
+      "O Panfleto de Ofertas da Quarta Verde já está no ar com mais de 40 itens em promoção. Toque para folhear e comprar direto pelo celular!",
+    targetUrl: "/panfleto-de-ofertas",
     sentCount: 3,
     sentBy: "Gestor SuperVerde",
     createdAt: "Ontem, 09:00",

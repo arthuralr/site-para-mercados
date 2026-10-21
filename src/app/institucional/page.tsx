@@ -111,28 +111,26 @@ function InstitutionalContent() {
 
             {/* Social Media Badges */}
             <div className="flex flex-wrap gap-2">
-              {storeSettings.instagramUrl && (
-                <a
-                  href={storeSettings.instagramUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25"
-                >
-                  <Instagram className="h-4 w-4 text-brand-orange-400" />
-                  <span>Instagram</span>
-                </a>
-              )}
-              {storeSettings.facebookUrl && (
-                <a
-                  href={storeSettings.facebookUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25"
-                >
-                  <Facebook className="h-4 w-4 text-brand-orange-400" />
-                  <span>Facebook</span>
-                </a>
-              )}
+              {storeSettings.socialLinks
+                .filter((social) => social.name.trim() && social.url.trim())
+                .map((social) => (
+                  <a
+                    key={social.id}
+                    href={social.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25"
+                  >
+                    {social.name.trim().toLowerCase() === "instagram" ? (
+                      <Instagram className="h-4 w-4 text-brand-orange-400" />
+                    ) : social.name.trim().toLowerCase() === "facebook" ? (
+                      <Facebook className="h-4 w-4 text-brand-orange-400" />
+                    ) : (
+                      <ExternalLink className="h-4 w-4 text-brand-orange-400" />
+                    )}
+                    <span>{social.name}</span>
+                  </a>
+                ))}
               <a
                 href={`https://wa.me/${storeSettings.whatsappOrderNumber.replace(
                   /\D/g,
@@ -280,8 +278,14 @@ function InstitutionalContent() {
                           <span className="rounded-md bg-brand-orange-100 px-2.5 py-0.5 text-[10px] font-black uppercase text-brand-orange-800">
                             {branch.sizeLabel}
                           </span>
-                          <span className="text-[11px] font-bold text-brand-green-700">
-                            Estacionamento Gratuito
+                          <span
+                            className={`text-[11px] font-bold ${
+                              branch.isOpen
+                                ? "text-brand-green-700"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {branch.isOpen ? "Aberta" : "Fechada"}
                           </span>
                         </div>
                         <h3 className="mt-2 text-base font-black text-slate-900">
@@ -298,10 +302,20 @@ function InstitutionalContent() {
                         <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-600">
                           <Phone className="h-3.5 w-3.5 shrink-0 text-brand-green-700" />
                           <span>
-                            SAC: {storeSettings.sacPhone} • Pedido mín.{" "}
+                            {branch.phone || `SAC: ${storeSettings.sacPhone}`} • Pedido mín.{" "}
                             {formatBRL(branch.minOrder)}
                           </span>
                         </p>
+                        {branch.email && (
+                          <p className="mt-1 text-xs text-slate-600">
+                            <a
+                              href={`mailto:${branch.email}`}
+                              className="hover:text-brand-green-700"
+                            >
+                              {branch.email}
+                            </a>
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -375,7 +389,7 @@ function InstitutionalContent() {
                     1. Descontos Automáticos no Caixa e no Site
                   </h4>
                   <p className="mt-1 text-slate-600">
-                    Basta digitar o CPF antes de passar as compras para ativar preços de atacado e ofertas exclusivas do jornalzinho.
+                    Basta digitar o CPF antes de passar as compras para ativar preços de atacado e ofertas exclusivas do Panfleto de Ofertas.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs">
@@ -383,7 +397,7 @@ function InstitutionalContent() {
                     2. Ofertas no Grupo VIP do WhatsApp
                   </h4>
                   <p className="mt-1 text-slate-600">
-                    Receba o Tabloide Digital da semana diretamente no seu celular assim que as promoções entram no ar.
+                    Receba o Panfleto de Ofertas da semana diretamente no seu celular assim que as promoções entram no ar.
                   </p>
                 </div>
               </div>

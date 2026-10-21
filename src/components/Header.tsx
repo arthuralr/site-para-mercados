@@ -29,6 +29,7 @@ import {
   Megaphone,
   Smartphone,
   Eye,
+  ChefHat,
 } from "lucide-react";
 import {
   StoreBranch,
@@ -36,9 +37,9 @@ import {
   TRENDING_SEARCHES,
 } from "@/data/mockData";
 import { useStore } from "@/context/StoreContext";
+import { formatProductQuantity } from "@/lib/productUnits";
 import { formatBRL } from "./ProductCard";
 import CartAndListsDrawers from "./CartAndListsDrawers";
-import PwaInstallBanner from "./PwaInstallBanner";
 import PushPermissionBanner from "./PushPermissionBanner";
 
 interface HeaderProps {
@@ -126,7 +127,7 @@ export default function Header({
     })
     .filter(Boolean) as { product: Product; qty: number }[];
 
-  const totalItems = cartEntries.reduce((acc, item) => acc + item.qty, 0);
+  const totalItems = cartEntries.length;
   const subtotal = cartEntries.reduce(
     (acc, item) => acc + item.product.price * item.qty,
     0
@@ -153,9 +154,6 @@ export default function Header({
 
   return (
     <>
-      {/* PWA & App Stores Install Bar */}
-      <PwaInstallBanner />
-
       {/* Web Push Notifications Permission Banner & Real-Time Push Toast */}
       <PushPermissionBanner />
 
@@ -182,13 +180,9 @@ export default function Header({
         <div className="bg-brand-green-800 text-white">
           <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-1.5 text-xs">
             <div className="flex items-center gap-2.5">
-              <span className="inline-flex items-center gap-1 rounded-full bg-brand-orange-500 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
-                <Sparkles className="h-3 w-3" />
-                {selectedBranch.sizeLabel}
-              </span>
               {!storeSettings.onlineShoppingEnabled ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-2.5 py-0.5 text-[11px] font-black text-slate-900">
-                  <Eye className="h-3 w-3" /> Modo Vitrine & Tabloide Digital
+                  <Eye className="h-3 w-3" /> Modo Vitrine & Panfleto de Ofertas
                 </span>
               ) : (
                 <span className="hidden items-center gap-1.5 text-emerald-100 xl:inline-flex">
@@ -232,15 +226,27 @@ export default function Header({
               </Link>
 
               <Link
-                href="/tabloide"
+                href="/panfleto-de-ofertas"
                 className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
-                  pathname?.startsWith("/tabloide")
+                  pathname?.startsWith("/panfleto-de-ofertas")
                     ? "bg-brand-orange-500 text-white shadow-sm ring-2 ring-white/40"
                     : "bg-brand-orange-500/90 text-white hover:bg-brand-orange-500"
                 }`}
               >
                 <Newspaper className="h-3.5 w-3.5" />
-                <span>Tabloide</span>
+                <span>Panfleto de Ofertas</span>
+              </Link>
+
+              <Link
+                href="/receitas"
+                className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold transition ${
+                  pathname?.startsWith("/receitas")
+                    ? "bg-white text-brand-green-800 shadow-xs"
+                    : "text-emerald-100 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <ChefHat className="h-3.5 w-3.5" />
+                <span>Receitas</span>
               </Link>
 
               {storeSettings.discountClubEnabled && (
@@ -353,7 +359,7 @@ export default function Header({
                     <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-2">
                       <div>
                         <h4 className="text-sm font-bold text-slate-800">
-                          Escolha a Filial / Porte da Loja
+                          Escolha a Filial
                         </h4>
                         <p className="text-xs text-slate-500">
                           Preços, pedido mínimo e tempo de entrega conforme a unidade
@@ -384,10 +390,7 @@ export default function Header({
                                 : "border-slate-200 hover:border-brand-green-300 hover:bg-slate-50"
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <span className="inline-block rounded-md bg-brand-orange-100 px-2 py-0.5 text-[10px] font-bold text-brand-orange-700">
-                                {branch.sizeLabel}
-                              </span>
+                            <div className="flex items-start justify-end gap-2">
                               {isSelected && (
                                 <CheckCircle2 className="h-4 w-4 shrink-0 text-brand-green-600" />
                               )}
@@ -595,7 +598,9 @@ export default function Header({
                               >
                                 <Plus className="h-3.5 w-3.5" />
                                 <span>
-                                  {qty > 0 ? `No carrinho (${qty})` : "Adicionar"}
+                                  {qty > 0
+                                    ? `No carrinho (${formatProductQuantity(item, qty)})`
+                                    : "Adicionar"}
                                 </span>
                               </button>
                             )}

@@ -44,6 +44,7 @@ export interface PedidoItemJson {
 export interface PedidoRow {
   id: string;
   cliente_nome: string;
+  cliente_email?: string | null;
   cliente_telefone: string;
   endereco: string;
   itens_json: PedidoItemJson[];

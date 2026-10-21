@@ -27,6 +27,7 @@ import {
 import { Product } from "@/data/mockData";
 import { useStore, SavedShoppingList } from "@/context/StoreContext";
 import { formatBRL } from "./ProductCard";
+import { formatProductQuantity, isSoldByWeight } from "@/lib/productUnits";
 
 export default function CartAndListsDrawers() {
   const router = useRouter();
@@ -56,9 +57,9 @@ export default function CartAndListsDrawers() {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Smart List Builder State (Criar lista definindo o nome primeiro e depois adicionando produtos)
-  const [listModalTab, setListModalTab] = useState<"minhas-listas" | "criar-inteligente">(
-    "minhas-listas"
-  );
+  const [listModalTab, setListModalTab] = useState<
+    "minhas-listas" | "criar-inteligente" | "digitar-manual"
+  >("minhas-listas");
   const [builderListName, setBuilderListName] = useState("Churrasco de Sábado");
   const [builderSearch, setBuilderSearch] = useState("");
   const [builderItems, setBuilderItems] = useState<Record<string, number>>({
@@ -67,6 +68,10 @@ export default function CartAndListsDrawers() {
     "prod-11": 1,
   });
   const [copiedListId, setCopiedListId] = useState<string | null>(null);
+  const [manualListText, setManualListText] = useState("");
+  const [manualItems, setManualItems] = useState<
+    { name: string; isChecked: boolean }[]
+  >([]);
 
   const cartEntries = Object.entries(cart)
     .map(([id, qty]) => {
@@ -75,7 +80,7 @@ export default function CartAndListsDrawers() {
     })
     .filter(Boolean) as { product: Product; qty: number }[];
 
-  const totalItems = cartEntries.reduce((acc, item) => acc + item.qty, 0);
+  const totalItems = cartEntries.length;
   const subtotal = cartEntries.reduce(
     (acc, item) => acc + item.product.price * item.qty,
     0
@@ -138,6 +143,41 @@ export default function CartAndListsDrawers() {
     setListModalTab("minhas-listas");
   };
 
+  const handleProcessManualList = (e: React.FormEvent) => {
+    e.preventDefault();
+    const items = manualListText
+      .split(/[\n,;]+|\s+e\s+/i)
+      .map((item) =>
+        item
+          .replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "")
+          .replace(/^(?:preciso comprar|quero comprar|comprar|lista:)\s*/i, "")
+          .trim()
+      )
+      .filter(Boolean);
+
+    if (items.length === 0) {
+      triggerToast("Digite pelo menos um produto para montar sua lista.");
+      return;
+    }
+
+    setManualItems(items.map((name) => ({ name, isChecked: false })));
+  };
+
+  const handleShareManualList = () => {
+    const message = [
+      "📝 *MINHA LISTA DE COMPRAS — SUPERVERDE*",
+      "",
+      ...manualItems.map(
+        ({ name, isChecked }) => `${isChecked ? "☑" : "☐"} ${name}`
+      ),
+    ].join("\n");
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+
   // Format Shopping List Text for Copy & WhatsApp Share
   const formatShoppingListMessage = (list: SavedShoppingList): string => {
     const entries = Object.entries(list.items)
@@ -154,7 +194,7 @@ export default function CartAndListsDrawers() {
       `----------------------------------`,
       ...entries.map(
         ({ prod, qty }, idx) =>
-          `${idx + 1}. *${qty}x ${prod.name}* (${prod.weightVolume}) — ${formatBRL(
+          `${idx + 1}. *${formatProductQuantity(prod, qty)} de ${prod.name}* (${prod.weightVolume}) — ${formatBRL(
             prod.price * qty
           )}`
       ),
@@ -242,7 +282,7 @@ export default function CartAndListsDrawers() {
             <div className="space-y-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
               {!storeSettings.onlineShoppingEnabled && (
                 <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs font-bold text-amber-900">
-                  ⚠️ Modo Vitrine / Tabloide Digital Ativo: As compras online estão pausadas no momento. Você ainda pode montar sua lista ou enviar pelo WhatsApp.
+                  ⚠️ Modo Vitrine / Panfleto de Ofertas Ativo: As compras online estão pausadas no momento. Você ainda pode montar sua lista ou enviar pelo WhatsApp.
                 </div>
               )}
 
@@ -397,7 +437,8 @@ export default function CartAndListsDrawers() {
                         </Link>
                         <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
                           <span>
-                            {formatBRL(product.price)} / {product.unit}
+                            {formatBRL(product.price)} /{" "}
+                            {isSoldByWeight(product) ? "kg" : product.unit}
                           </span>
                           {product.oldPrice && (
                             <span className="line-through">
@@ -426,7 +467,7 @@ export default function CartAndListsDrawers() {
                           <Minus className="h-3.5 w-3.5" />
                         </button>
                         <span className="w-6 text-center text-xs font-extrabold text-slate-800">
-                          {qty}
+                          {formatProductQuantity(product, qty)}
                         </span>
                         <button
                           type="button"
@@ -574,9 +615,116 @@ export default function CartAndListsDrawers() {
                 <ListPlus className="h-4 w-4 text-brand-orange-500" />
                 <span>+ Criar Nova Lista do Zero (Passo a Passo)</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setListModalTab("digitar-manual")}
+                className={`flex items-center gap-2 rounded-t-2xl border-b-2 px-4 py-2.5 text-xs font-extrabold transition ${
+                  listModalTab === "digitar-manual"
+                    ? "border-brand-orange-500 bg-white text-brand-orange-600"
+                    : "border-transparent text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <ListPlus className="h-4 w-4 text-brand-orange-500" />
+                <span>Digitar Lista Manual</span>
+              </button>
             </div>
 
-            {listModalTab === "criar-inteligente" ? (
+            {listModalTab === "digitar-manual" ? (
+              <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+                <form onSubmit={handleProcessManualList} className="space-y-3">
+                  <label
+                    htmlFor="manual-shopping-list"
+                    className="block text-xs font-black uppercase tracking-wider text-slate-700"
+                  >
+                    Cole ou digite os produtos da sua lista
+                  </label>
+                  <textarea
+                    id="manual-shopping-list"
+                    rows={5}
+                    value={manualListText}
+                    onChange={(e) => setManualListText(e.target.value)}
+                    placeholder={"Ex.: arroz, feijão, leite\nPão\n2. Café"}
+                    className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-800 placeholder-slate-400 focus:border-brand-green-600 focus:outline-none"
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[11px] text-slate-500">
+                      Separe os produtos por linha, vírgula ou ponto e vírgula.
+                    </p>
+                    <button
+                      type="submit"
+                      className="inline-flex items-center gap-2 rounded-xl bg-brand-green-700 px-4 py-2.5 text-xs font-extrabold text-white transition hover:bg-brand-green-800"
+                    >
+                      <ListPlus className="h-4 w-4" />
+                      <span>Montar lista</span>
+                    </button>
+                  </div>
+                </form>
+
+                {manualItems.length > 0 && (
+                  <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="text-sm font-black text-slate-900">
+                        Sua lista ({manualItems.length}{" "}
+                        {manualItems.length === 1 ? "item" : "itens"})
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={handleShareManualList}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-extrabold text-white transition hover:bg-emerald-700"
+                      >
+                        <Share2 className="h-4 w-4" />
+                        <span>Compartilhar no WhatsApp</span>
+                      </button>
+                    </div>
+                    <ul className="divide-y divide-slate-200">
+                      {manualItems.map((item, index) => (
+                        <li
+                          key={`${item.name}-${index}`}
+                          className="flex items-center gap-3 py-2"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={item.isChecked}
+                            onChange={() =>
+                              setManualItems((current) =>
+                                current.map((entry, entryIndex) =>
+                                  entryIndex === index
+                                    ? { ...entry, isChecked: !entry.isChecked }
+                                    : entry
+                                )
+                              )
+                            }
+                            aria-label={`Marcar ${item.name} como comprado`}
+                            className="h-4 w-4 shrink-0 rounded accent-brand-green-700"
+                          />
+                          <span
+                            className={`flex-1 text-sm ${
+                              item.isChecked
+                                ? "text-slate-400 line-through"
+                                : "font-medium text-slate-800"
+                            }`}
+                          >
+                            {item.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setManualItems((current) =>
+                                current.filter((_, entryIndex) => entryIndex !== index)
+                              )
+                            }
+                            aria-label={`Remover ${item.name} da lista`}
+                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            ) : listModalTab === "criar-inteligente" ? (
               /* TAB 2: CRIAR LISTA DEFININDO PRIMEIRO O NOME E DEPOIS OS PRODUTOS */
               <form
                 onSubmit={handleSaveSmartList}
@@ -861,7 +1009,7 @@ export default function CartAndListsDrawers() {
                                 />
                                 <div className="max-w-[120px]">
                                   <p className="truncate text-[11px] font-bold text-slate-800">
-                                    {qty}x {prod.name}
+                                    {formatProductQuantity(prod, qty)} {prod.name}
                                   </p>
                                   <p className="text-[10px] font-semibold text-brand-green-700">
                                     {formatBRL(prod.price * qty)}

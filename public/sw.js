@@ -1,5 +1,5 @@
 const CACHE_NAME = "superverde-pwa-v1";
-const OFFLINE_URLS = ["/", "/catalogo", "/tabloide", "/bio"];
+const OFFLINE_URLS = ["/", "/catalogo", "/panfleto-de-ofertas", "/bio"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,7 +31,7 @@ self.addEventListener("push", (event) => {
   let payload = {
     title: "SuperVerde Ofertas Relâmpago",
     body: "Novas ofertas disponíveis no supermercado! Clique para conferir.",
-    url: "/tabloide",
+    url: "/panfleto-de-ofertas",
     icon: "/icon-superverde.svg",
     badge: "/icon-superverde.svg",
     tag: "superverde-push",

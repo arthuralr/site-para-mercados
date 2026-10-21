@@ -1,8 +1,10 @@
 export interface StoreBranch {
   id: string;
   name: string;
-  sizeLabel: "Pequeno Porte (Express)" | "Médio Porte (Super)" | "Grande Porte (Hiper)";
+  sizeLabel: string;
   address: string;
+  phone?: string;
+  email?: string;
   deliveryTime: string;
   minOrder: number;
   freeShippingThreshold: number;
@@ -107,6 +109,8 @@ export const STORE_BRANCHES: StoreBranch[] = [
     name: "SuperVerde — Unidade Jardins (Médio Porte)",
     sizeLabel: "Médio Porte (Super)",
     address: "Av. Brasil, 1450 - Jardins",
+    phone: "(11) 3333-1450",
+    email: "jardins@superverde.com.br",
     deliveryTime: "45 - 60 min",
     minOrder: 40,
     freeShippingThreshold: 199,
@@ -118,6 +122,8 @@ export const STORE_BRANCHES: StoreBranch[] = [
     name: "SuperVerde Express — Vila Nova (Pequeno Porte)",
     sizeLabel: "Pequeno Porte (Express)",
     address: "Rua das Palmeiras, 310 - Vila Nova",
+    phone: "(11) 3333-0310",
+    email: "vilanova@superverde.com.br",
     deliveryTime: "20 - 35 min",
     minOrder: 25,
     freeShippingThreshold: 120,
@@ -129,6 +135,8 @@ export const STORE_BRANCHES: StoreBranch[] = [
     name: "SuperVerde Hiper — Shopping Sul (Grande Porte)",
     sizeLabel: "Grande Porte (Hiper)",
     address: "Rod. Raposo Tavares, Km 15 - Sul",
+    phone: "(11) 3333-0015",
+    email: "morumbi@superverde.com.br",
     deliveryTime: "60 - 90 min",
     minOrder: 60,
     freeShippingThreshold: 250,
@@ -235,7 +243,7 @@ export const ALL_DIETARY_RESTRICTIONS: DietaryRestriction[] = [
 
 export const DEFAULT_TABLOID_EDITION: TabloidEdition = {
   id: "tabloid-142",
-  title: "Encarte Semanal #142 — Especial Fim de Semana & Quarta Verde",
+  title: "Panfleto de Ofertas #142 — Especial Fim de Semana & Quarta Verde",
   validity: "Válido de 15/10/2026 a 20/10/2026 ou enquanto durarem os estoques",
   fileType: "image",
   fileName: "encarte_semanal_superverde_ed142.jpg",

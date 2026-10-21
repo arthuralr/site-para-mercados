@@ -326,6 +326,7 @@ export async function fetchPedidosFromSupabase(): Promise<{
  */
 export async function createPedidoInSupabase(orderInput: {
   cliente_nome: string;
+  cliente_email?: string;
   cliente_telefone: string;
   endereco: string;
   itens_json: PedidoItemJson[];
@@ -338,6 +339,7 @@ export async function createPedidoInSupabase(orderInput: {
   const fallbackOrder: PedidoRow = {
     id: `SV-${Math.floor(100000 + Math.random() * 900000)}`,
     cliente_nome: orderInput.cliente_nome,
+    cliente_email: orderInput.cliente_email,
     cliente_telefone: orderInput.cliente_telefone,
     endereco: orderInput.endereco,
     itens_json: orderInput.itens_json,
@@ -358,6 +360,7 @@ export async function createPedidoInSupabase(orderInput: {
     .insert([
       {
         cliente_nome: orderInput.cliente_nome,
+        cliente_email: orderInput.cliente_email || null,
         cliente_telefone: orderInput.cliente_telefone,
         endereco: orderInput.endereco,
         itens_json: orderInput.itens_json,

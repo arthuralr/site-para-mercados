@@ -6,6 +6,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import {
   STORE_BRANCHES,
@@ -37,6 +38,10 @@ import {
   INITIAL_PUSH_CAMPAIGNS,
 } from "@/data/cmsData";
 import {
+  MarketCompetitor,
+  MarketCompetitorRow,
+} from "@/data/marketResearch";
+import {
   supabase,
   isSupabaseConfigured,
   PedidoRow,
@@ -51,6 +56,10 @@ import {
   createPedidoInSupabase,
   updatePedidoStatusInSupabase,
 } from "@/lib/supabase/queries";
+import {
+  formatProductQuantity,
+  getProductQuantityStep,
+} from "@/lib/productUnits";
 
 export interface SavedShoppingList {
   id: string;
@@ -192,6 +201,7 @@ interface StoreContextValue {
   orders: PedidoRow[];
   createOrder: (orderInput: {
     cliente_nome: string;
+    cliente_email?: string;
     cliente_telefone: string;
     endereco: string;
     itens_json: PedidoItemJson[];
@@ -216,7 +226,9 @@ interface StoreContextValue {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   addToCart: (product: Product, qty?: number) => void;
-  removeFromCart: (productId: string) => void;
+  addItemsToCart: (items: { productId: string; quantity: number }[]) => void;
+  addOrderItemsToCart: (items: PedidoItemJson[]) => void;
+  removeFromCart: (productId: string, qty?: number) => void;
   clearProductFromCart: (productId: string) => void;
   clearCart: () => void;
   toggleFavorite: (productId: string) => void;
@@ -243,8 +255,18 @@ interface StoreContextValue {
   deleteSavedList: (listId: string) => void;
   // Global CMS Store Settings (PWA, Online Toggle, Payments, WhatsApp, iFood, TopBar, Social)
   storeSettings: StoreSettings;
-  updateStoreSettings: (updates: Partial<StoreSettings>) => void;
+  updateStoreSettings: (updates: Partial<StoreSettings>) => Promise<boolean>;
   incrementSiteVisit: () => void;
+  marketCompetitors: MarketCompetitor[];
+  saveMarketCompetitor: (
+    competitor: MarketCompetitor
+  ) => Promise<boolean>;
+  deleteMarketCompetitor: (competitorId: string) => Promise<boolean>;
+  setMarketCompetitorPrice: (
+    competitorId: string,
+    productId: string,
+    price: number | null
+  ) => Promise<boolean>;
   // CMS Banners (Main 1200x400px + Mini Banners 600x250px)
   heroBanners: HeroBanner[];
   addHeroBanner: (banner: Omit<HeroBanner, "id">) => void;
@@ -331,6 +353,7 @@ const STORAGE_KEY_PRODUCTS = "superverde_catalog_products_v1";
 const STORAGE_KEY_TABLOIDS = "superverde_tabloid_editions_v1";
 const STORAGE_KEY_ORDERS = "superverde_orders_v1";
 const STORAGE_KEY_SETTINGS = "superverde_store_settings_v1";
+const STORAGE_KEY_MARKET_COMPETITORS = "superverde_market_competitors_v1";
 const STORAGE_KEY_HERO_BANNERS = "superverde_hero_banners_v1";
 const STORAGE_KEY_MINI_BANNERS = "superverde_mini_banners_v1";
 const STORAGE_KEY_BIO_LINKS = "superverde_bio_links_v1";
@@ -344,6 +367,52 @@ const STORAGE_KEY_PUSH_CAMPAIGNS = "superverde_push_campaigns_v1";
 const STORAGE_KEY_BROWSER_SUBSCRIBED = "superverde_browser_push_subscribed_v1";
 const STORAGE_KEY_LAST_PUSH_EVENT = "superverde_last_push_broadcast_event_v1";
 const SESSION_KEY_VISIT_COUNTED = "superverde_session_visit_counted";
+
+function hexToRgb(color: string): [number, number, number] | null {
+  const normalized = color.replace("#", "");
+  if (!/^[\da-f]{6}$/i.test(normalized)) return null;
+  return [
+    parseInt(normalized.slice(0, 2), 16),
+    parseInt(normalized.slice(2, 4), 16),
+    parseInt(normalized.slice(4, 6), 16),
+  ];
+}
+
+function normalizeStoreSettings(value: unknown): StoreSettings {
+  const source =
+    value && typeof value === "object"
+      ? (value as Partial<StoreSettings>)
+      : {};
+  const settings = { ...DEFAULT_STORE_SETTINGS, ...source };
+  return {
+    ...settings,
+    branches:
+      Array.isArray(source.branches) && source.branches.length > 0
+        ? source.branches
+        : DEFAULT_STORE_SETTINGS.branches,
+    socialLinks: Array.isArray(source.socialLinks)
+      ? source.socialLinks
+      : DEFAULT_STORE_SETTINGS.socialLinks,
+    primaryColor: hexToRgb(settings.primaryColor)
+      ? settings.primaryColor
+      : DEFAULT_STORE_SETTINGS.primaryColor,
+    secondaryColor: hexToRgb(settings.secondaryColor)
+      ? settings.secondaryColor
+      : DEFAULT_STORE_SETTINGS.secondaryColor,
+  };
+}
+
+function mixColor(
+  color: [number, number, number],
+  target: [number, number, number],
+  amount: number
+): string {
+  return color
+    .map((channel, index) =>
+      Math.round(channel + (target[index] - channel) * amount)
+    )
+    .join(" ");
+}
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [selectedBranch, setSelectedBranch] = useState<StoreBranch>(
@@ -365,6 +434,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(
     DEFAULT_STORE_SETTINGS
   );
+  const storeSettingsRef = useRef(storeSettings);
+  const storeSettingsChangedRef = useRef(false);
+  const settingsSaveQueue = useRef(Promise.resolve(true));
+  const [marketCompetitors, setMarketCompetitors] = useState<
+    MarketCompetitor[]
+  >([]);
+  const marketCompetitorsRef = useRef<MarketCompetitor[]>([]);
+  const marketResearchSaveQueue = useRef(Promise.resolve(true));
   const [heroBanners, setHeroBanners] = useState<HeroBanner[]>(HERO_BANNERS);
   const [miniBanners, setMiniBanners] =
     useState<MiniBanner[]>(DEFAULT_MINI_BANNERS);
@@ -413,6 +490,44 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setLastAddedMessage((current) => (current === msg ? null : current));
     }, 3400);
   }, []);
+
+  useEffect(() => {
+    storeSettingsRef.current = storeSettings;
+  }, [storeSettings]);
+
+  useEffect(() => {
+    const branches = storeSettings.branches?.filter((branch) => branch.id);
+    if (!branches?.length) return;
+
+    const currentBranch = branches.find(
+      (branch) => branch.id === selectedBranch.id
+    );
+    const nextBranch = currentBranch || branches[0];
+    if (nextBranch !== selectedBranch) setSelectedBranch(nextBranch);
+  }, [selectedBranch, storeSettings.branches]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const primary = hexToRgb(storeSettings.primaryColor);
+    const secondary = hexToRgb(storeSettings.secondaryColor);
+    if (primary) {
+      root.style.setProperty("--brand-primary-50", mixColor(primary, [255, 255, 255], 0.94));
+      root.style.setProperty("--brand-primary-100", mixColor(primary, [255, 255, 255], 0.86));
+      root.style.setProperty("--brand-primary-500", primary.join(" "));
+      root.style.setProperty("--brand-primary-600", mixColor(primary, [0, 0, 0], 0.12));
+      root.style.setProperty("--brand-primary-700", mixColor(primary, [0, 0, 0], 0.24));
+      root.style.setProperty("--brand-primary-800", mixColor(primary, [0, 0, 0], 0.38));
+      root.style.setProperty("--brand-primary-900", mixColor(primary, [0, 0, 0], 0.68));
+    }
+    if (secondary) {
+      root.style.setProperty("--brand-secondary-50", mixColor(secondary, [255, 255, 255], 0.94));
+      root.style.setProperty("--brand-secondary-100", mixColor(secondary, [255, 255, 255], 0.86));
+      root.style.setProperty("--brand-secondary-400", mixColor(secondary, [255, 255, 255], 0.24));
+      root.style.setProperty("--brand-secondary-500", secondary.join(" "));
+      root.style.setProperty("--brand-secondary-600", mixColor(secondary, [0, 0, 0], 0.12));
+      root.style.setProperty("--brand-secondary-700", mixColor(secondary, [0, 0, 0], 0.24));
+    }
+  }, [storeSettings.primaryColor, storeSettings.secondaryColor]);
 
   const persistProductsLocal = (nextProducts: Product[]) => {
     setAllProducts(nextProducts);
@@ -497,6 +612,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (Array.isArray(parsedOrders) && parsedOrders.length > 0)
           setOrders(parsedOrders);
       }
+      const rawMarketCompetitors = localStorage.getItem(
+        STORAGE_KEY_MARKET_COMPETITORS
+      );
+      if (rawMarketCompetitors) {
+        const parsedCompetitors = JSON.parse(rawMarketCompetitors);
+        if (Array.isArray(parsedCompetitors)) {
+          marketCompetitorsRef.current = parsedCompetitors;
+          setMarketCompetitors(parsedCompetitors);
+        }
+      }
       const rawTabloids = localStorage.getItem(STORAGE_KEY_TABLOIDS);
       if (rawTabloids) {
         const parsedTabs = JSON.parse(rawTabloids);
@@ -506,10 +631,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       let loadedSettings = DEFAULT_STORE_SETTINGS;
       const rawSettings = localStorage.getItem(STORAGE_KEY_SETTINGS);
       if (rawSettings) {
-        loadedSettings = {
-          ...DEFAULT_STORE_SETTINGS,
-          ...JSON.parse(rawSettings),
-        };
+        loadedSettings = normalizeStoreSettings(JSON.parse(rawSettings));
       }
       // Automatically count session visit once per browser session
       if (!sessionStorage.getItem(SESSION_KEY_VISIT_COUNTED)) {
@@ -523,6 +645,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           JSON.stringify(loadedSettings)
         );
       }
+      storeSettingsRef.current = loadedSettings;
       setStoreSettings(loadedSettings);
 
       const rawHero = localStorage.getItem(STORAGE_KEY_HERO_BANNERS);
@@ -588,6 +711,89 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // Ignore storage errors
     }
 
+    if (supabase && isSupabaseConfigured()) {
+      void (async () => {
+        try {
+          const { data, error } = await supabase
+            .from("pesquisa_concorrentes")
+            .select("*")
+            .order("nome", { ascending: true });
+          if (error) {
+            console.error("Falha ao carregar pesquisa de concorrentes:", error);
+            triggerToast(
+              "Não foi possível carregar a pesquisa de concorrentes do Supabase."
+            );
+            return;
+          }
+          const competitors = ((data || []) as MarketCompetitorRow[]).map(
+            (row) => ({
+              id: row.id,
+              name: row.nome,
+              neighborhood: row.bairro,
+              prices: row.precos_json || {},
+            })
+          );
+          marketCompetitorsRef.current = competitors;
+          setMarketCompetitors(competitors);
+          try {
+            localStorage.setItem(
+              STORAGE_KEY_MARKET_COMPETITORS,
+              JSON.stringify(competitors)
+            );
+          } catch (storageError) {
+            console.error(
+              "Falha ao guardar a pesquisa de concorrentes localmente:",
+              storageError
+            );
+          }
+        } catch (error) {
+          console.error("Falha ao carregar pesquisa de concorrentes:", error);
+          triggerToast(
+            "Não foi possível carregar a pesquisa de concorrentes do Supabase."
+          );
+        }
+      })();
+
+      void (async () => {
+        try {
+          const { data, error } = await supabase
+            .from("configuracoes_loja")
+            .select("dados_json")
+            .eq("id", "config-principal")
+            .maybeSingle();
+          if (error) {
+            console.error("Falha ao carregar configurações do Supabase:", error);
+            triggerToast(
+              "Não foi possível carregar as configurações da loja do Supabase."
+            );
+            return;
+          }
+          if (!data?.dados_json) return;
+
+          if (storeSettingsChangedRef.current) return;
+          const remoteSettings = normalizeStoreSettings(data.dados_json);
+          storeSettingsRef.current = remoteSettings;
+          setStoreSettings(remoteSettings);
+          try {
+            localStorage.setItem(
+              STORAGE_KEY_SETTINGS,
+              JSON.stringify(remoteSettings)
+            );
+          } catch (storageError) {
+            console.error(
+              "Falha ao guardar localmente as configurações sincronizadas:",
+              storageError
+            );
+          }
+        } catch (error) {
+          console.error("Falha ao carregar configurações do Supabase:", error);
+          triggerToast(
+            "Não foi possível carregar as configurações da loja do Supabase."
+          );
+        }
+      })();
+    }
+
     // Fetch push_subscriptions from Supabase if configured
     if (supabase && isSupabaseConfigured()) {
       supabase
@@ -625,7 +831,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
 
     syncWithSupabase();
-  }, [syncWithSupabase]);
+  }, [syncWithSupabase, triggerToast]);
 
   // Listen for real-time Web Push broadcasts across tabs/windows
   useEffect(() => {
@@ -691,16 +897,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // ============================================================================
   // GLOBAL CMS STORE SETTINGS & COUNTERS
   // ============================================================================
-  const updateStoreSettings = (updates: Partial<StoreSettings>) => {
-    setStoreSettings((prev) => {
-      const next = { ...prev, ...updates };
+  const updateStoreSettings = async (updates: Partial<StoreSettings>) => {
+    const next = normalizeStoreSettings({
+      ...storeSettingsRef.current,
+      ...updates,
+    });
+    storeSettingsChangedRef.current = true;
+    storeSettingsRef.current = next;
+    setStoreSettings(next);
+    let localSaveFailed = false;
+    try {
+      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(next));
+    } catch (error) {
+      console.error("Falha ao guardar configurações localmente:", error);
+      localSaveFailed = true;
+    }
+
+    const supabaseClient = supabase;
+    if (!supabaseClient || !isSupabaseConfigured()) {
+      triggerToast(
+        localSaveFailed
+          ? "Falha ao salvar localmente e Supabase não está configurado."
+          : "Configurações salvas neste navegador. Supabase não está configurado para sincronização."
+      );
+      return false;
+    }
+
+    settingsSaveQueue.current = settingsSaveQueue.current.then(async () => {
       try {
-        localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(next));
-      } catch {
-        // Ignore
-      }
-      if (supabase && isSupabaseConfigured()) {
-        supabase
+        const { error } = await supabaseClient
           .from("configuracoes_loja")
           .upsert(
             {
@@ -709,12 +934,208 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               atualizado_em: new Date().toISOString(),
             },
             { onConflict: "id" }
-          )
-          .then(() => {});
+          );
+        if (error) {
+          console.error("Falha ao salvar configurações no Supabase:", error);
+          triggerToast(
+            "Falha ao sincronizar as configurações com o Supabase. A cópia local foi mantida."
+          );
+          return false;
+        }
+        triggerToast(
+          localSaveFailed
+            ? "Configurações sincronizadas com o Supabase, mas não puderam ser salvas neste navegador."
+            : "Configurações da loja salvas e sincronizadas com o Supabase."
+        );
+        return true;
+      } catch (error) {
+        console.error("Falha ao salvar configurações no Supabase:", error);
+        triggerToast(
+          "Falha ao sincronizar as configurações com o Supabase. A cópia local foi mantida."
+        );
+        return false;
       }
-      return next;
     });
-    triggerToast("Configurações da loja salvas e aplicadas em tempo real!");
+    return await settingsSaveQueue.current;
+  };
+
+  const persistMarketCompetitors = (next: MarketCompetitor[]) => {
+    marketCompetitorsRef.current = next;
+    setMarketCompetitors(next);
+    try {
+      localStorage.setItem(
+        STORAGE_KEY_MARKET_COMPETITORS,
+        JSON.stringify(next)
+      );
+    } catch (error) {
+      console.error("Falha ao guardar pesquisa de concorrentes localmente:", error);
+    }
+  };
+
+  const saveMarketCompetitor = async (
+    competitor: MarketCompetitor
+  ): Promise<boolean> => {
+    const name = competitor.name.trim();
+    const neighborhood = competitor.neighborhood.trim();
+    if (!competitor.id || !name || !neighborhood) {
+      triggerToast("Informe o nome e o bairro do concorrente.");
+      return false;
+    }
+    const next = marketCompetitorsRef.current.some(
+      (item) => item.id === competitor.id
+    )
+      ? marketCompetitorsRef.current.map((item) =>
+          item.id === competitor.id
+            ? { ...competitor, name, neighborhood }
+            : item
+        )
+      : [...marketCompetitorsRef.current, { ...competitor, name, neighborhood }];
+    persistMarketCompetitors(next);
+
+    const supabaseClient = supabase;
+    if (!supabaseClient || !isSupabaseConfigured()) {
+      triggerToast(
+        "Concorrente salvo localmente. Configure o Supabase para sincronizar."
+      );
+      return false;
+    }
+
+    marketResearchSaveQueue.current = marketResearchSaveQueue.current.then(
+      async () => {
+        try {
+          const { error } = await supabaseClient
+            .from("pesquisa_concorrentes")
+            .upsert(
+              {
+                id: competitor.id,
+                nome: name,
+                bairro: neighborhood,
+                precos_json: competitor.prices,
+                atualizado_em: new Date().toISOString(),
+              },
+              { onConflict: "id" }
+            );
+          if (error) throw error;
+          triggerToast("Concorrente salvo e sincronizado com o Supabase.");
+          return true;
+        } catch (error) {
+          console.error("Falha ao salvar concorrente no Supabase:", error);
+          triggerToast(
+            "Concorrente salvo localmente, mas a sincronização com o Supabase falhou."
+          );
+          return false;
+        }
+      }
+    );
+    return await marketResearchSaveQueue.current;
+  };
+
+  const deleteMarketCompetitor = async (
+    competitorId: string
+  ): Promise<boolean> => {
+    const next = marketCompetitorsRef.current.filter(
+      (item) => item.id !== competitorId
+    );
+    persistMarketCompetitors(next);
+
+    const supabaseClient = supabase;
+    if (!supabaseClient || !isSupabaseConfigured()) {
+      triggerToast(
+        "Concorrente removido localmente. Configure o Supabase para sincronizar."
+      );
+      return false;
+    }
+
+    marketResearchSaveQueue.current = marketResearchSaveQueue.current.then(
+      async () => {
+        try {
+          const { error } = await supabaseClient
+            .from("pesquisa_concorrentes")
+            .delete()
+            .eq("id", competitorId);
+          if (error) throw error;
+          triggerToast("Concorrente removido da pesquisa de mercado.");
+          return true;
+        } catch (error) {
+          console.error("Falha ao remover concorrente no Supabase:", error);
+          triggerToast(
+            "Concorrente removido localmente, mas a sincronização com o Supabase falhou."
+          );
+          return false;
+        }
+      }
+    );
+    return await marketResearchSaveQueue.current;
+  };
+
+  const setMarketCompetitorPrice = async (
+    competitorId: string,
+    productId: string,
+    price: number | null
+  ): Promise<boolean> => {
+    if (
+      price !== null &&
+      (!Number.isFinite(price) || price < 0)
+    ) {
+      triggerToast("Informe um preço válido, igual ou maior que zero.");
+      return false;
+    }
+    const next = marketCompetitorsRef.current.map((competitor) => {
+      if (competitor.id !== competitorId) return competitor;
+      const prices = { ...competitor.prices };
+      if (price === null) {
+        delete prices[productId];
+      } else {
+        prices[productId] = price;
+      }
+      return { ...competitor, prices };
+    });
+    const changed = next.some(
+      (competitor, index) =>
+        competitor.prices !== marketCompetitorsRef.current[index]?.prices
+    );
+    if (!changed) return false;
+    persistMarketCompetitors(next);
+
+    const competitor = next.find((item) => item.id === competitorId);
+    const supabaseClient = supabase;
+    if (!competitor || !supabaseClient || !isSupabaseConfigured()) {
+      triggerToast(
+        "Preço salvo localmente. Configure o Supabase para sincronizar."
+      );
+      return false;
+    }
+
+    marketResearchSaveQueue.current = marketResearchSaveQueue.current.then(
+      async () => {
+        try {
+          const { error } = await supabaseClient
+            .from("pesquisa_concorrentes")
+            .upsert(
+              {
+                id: competitor.id,
+                nome: competitor.name,
+                bairro: competitor.neighborhood,
+                precos_json: competitor.prices,
+                atualizado_em: new Date().toISOString(),
+              },
+              { onConflict: "id" }
+            );
+          if (error) throw error;
+          return true;
+        } catch (error) {
+          console.error(
+            "Falha ao salvar preço coletado do concorrente:",
+            error
+          );
+          triggerToast(
+            "Preço salvo localmente, mas a sincronização com o Supabase falhou."
+          );
+          return false;
+        }
+      }
+    );
+    return await marketResearchSaveQueue.current;
   };
 
   const incrementSiteVisit = useCallback(() => {
@@ -1198,11 +1619,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             Notification.permission === "granted"
           ) {
             reg.showNotification("🔔 Alertas SuperVerde Ativados!", {
-              body: "Pronto! Você receberá nossas Ofertas Relâmpago e o Encarte da Semana em primeira mão.",
+              body: "Pronto! Você receberá nossas Ofertas Relâmpago e o Panfleto de Ofertas em primeira mão.",
               icon: "/icon-superverde.svg",
               badge: "/icon-superverde.svg",
               tag: "superverde-welcome-push",
-              data: { url: "/tabloide" },
+              data: { url: "/panfleto-de-ofertas" },
             });
           }
         })
@@ -1431,6 +1852,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const createOrder = async (orderInput: {
     cliente_nome: string;
+    cliente_email?: string;
     cliente_telefone: string;
     endereco: string;
     itens_json: PedidoItemJson[];
@@ -1487,7 +1909,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ),
     ];
     persistTabloids(next);
-    triggerToast(`Encarte "${edition.title}" publicado com sucesso!`);
+    triggerToast(`Panfleto de Ofertas "${edition.title}" publicado com sucesso!`);
   };
 
   const setActiveTabloidEdition = (id: string) => {
@@ -1496,42 +1918,111 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       isActive: t.id === id,
     }));
     persistTabloids(next);
-    triggerToast("Encarte principal da semana atualizado!");
+    triggerToast("Panfleto de Ofertas principal atualizado!");
   };
 
   const deleteTabloidEdition = (id: string) => {
     if (tabloidEditions.length <= 1) return;
     persistTabloids(tabloidEditions.filter((t) => t.id !== id));
-    triggerToast("Encarte removido.");
+    triggerToast("Panfleto de Ofertas removido.");
   };
 
-  const addToCart = (product: Product, qty = 1) => {
+  const addToCart = (product: Product, qty?: number) => {
     if (!storeSettings.onlineShoppingEnabled) {
       triggerToast(
         "Modo Vitrine ativo: compras online pausadas temporariamente pelo gestor."
       );
       return;
     }
+    const quantityToAdd = qty ?? getProductQuantityStep(product);
     setCart((prev) => ({
       ...prev,
-      [product.id]: (prev[product.id] || 0) + qty,
+      [product.id]: Number(
+        ((prev[product.id] || 0) + quantityToAdd).toFixed(3)
+      ),
     }));
     triggerToast(
-      `${qty}x "${product.name.slice(0, 30)}..." adicionado ao carrinho!`
+      `${formatProductQuantity(product, quantityToAdd)} de "${product.name.slice(0, 30)}..." adicionado ao carrinho!`
     );
   };
 
-  const removeFromCart = (productId: string) => {
+  const addItemsToCart = (
+    items: { productId: string; quantity: number }[]
+  ) => {
+    if (!storeSettings.onlineShoppingEnabled) {
+      triggerToast(
+        "Modo Vitrine ativo: compras online pausadas temporariamente pelo gestor."
+      );
+      return;
+    }
+
+    const quantities = new Map<string, number>();
+    items.forEach((item) => {
+      if (
+        typeof item.productId === "string" &&
+        Number.isFinite(item.quantity) &&
+        item.quantity > 0
+      ) {
+        quantities.set(
+          item.productId,
+          (quantities.get(item.productId) || 0) + item.quantity
+        );
+      }
+    });
+    const availableQuantities = Array.from(quantities.entries()).filter(
+      ([productId]) =>
+        allProducts.some(
+          (product) =>
+            product.id === productId && product.isActive !== false
+        )
+    );
+    const unavailableCount = quantities.size - availableQuantities.length;
+
+    if (availableQuantities.length === 0) {
+      triggerToast("Nenhum item está disponível no momento.");
+      return;
+    }
+
+    setCart((current) => {
+      const next = { ...current };
+      availableQuantities.forEach(([productId, quantity]) => {
+        next[productId] = Number(
+          ((next[productId] || 0) + quantity).toFixed(3)
+        );
+      });
+      return next;
+    });
+    triggerToast(
+      unavailableCount > 0
+        ? `${availableQuantities.length} produtos adicionados ao carrinho; ${unavailableCount} indisponíveis foram ignorados.`
+        : `${availableQuantities.length} produtos adicionados ao carrinho.`
+    );
+  };
+
+  const addOrderItemsToCart = (items: PedidoItemJson[]) => {
+    addItemsToCart(
+      items.map((item) => ({
+        productId: item.produto_id,
+        quantity: item.quantidade,
+      }))
+    );
+  };
+
+  const removeFromCart = (productId: string, qty?: number) => {
     setCart((prev) => {
       const current = prev[productId] || 0;
-      if (current <= 1) {
+      const product = allProducts.find((item) => item.id === productId);
+      const quantityToRemove =
+        qty ?? (product ? getProductQuantityStep(product) : 1);
+      const nextQuantity = Number((current - quantityToRemove).toFixed(3));
+      if (nextQuantity <= 0) {
         const next = { ...prev };
         delete next[productId];
         return next;
       }
       return {
         ...prev,
-        [productId]: current - 1,
+        [productId]: nextQuantity,
       };
     });
   };
@@ -1677,7 +2168,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   return (
     <StoreContext.Provider
       value={{
-        branches: STORE_BRANCHES,
+        branches: storeSettings.branches,
         selectedBranch,
         setSelectedBranch,
         isSupabaseConnected,
@@ -1702,6 +2193,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         searchQuery,
         setSearchQuery,
         addToCart,
+        addItemsToCart,
+        addOrderItemsToCart,
         removeFromCart,
         clearProductFromCart,
         clearCart,
@@ -1722,6 +2215,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         storeSettings,
         updateStoreSettings,
         incrementSiteVisit,
+        marketCompetitors,
+        saveMarketCompetitor,
+        deleteMarketCompetitor,
+        setMarketCompetitorPrice,
         heroBanners,
         addHeroBanner,
         updateHeroBanner,
